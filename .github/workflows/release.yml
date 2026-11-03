@@ -113,24 +113,10 @@ jobs:
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: Open-Revo.exe
-          path: dist_artifacts/open-revo.exe
+          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-artifacts
+          path: dist_artifacts/*
           archive: false
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-x64-Setup.exe
-          path: dist_artifacts/OpenRevo-*-x64-Setup.exe
-          archive: false
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-protable.exe
-          path: dist_artifacts/OpenRevo-*-protable.exe
-          archive: false
-      - uses: actions/upload-artifact@v7
-        with:
-          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-checksums.txt
-          path: dist_artifacts/checksums.txt
-          archive: false
+          if-no-files-found: error
 
       - name: Publish GitHub Release (Tag / Dispatch)
         uses: softprops/action-gh-release@v3
