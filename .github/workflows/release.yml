@@ -116,7 +116,7 @@ jobs:
           name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-x64.exe
           path: dist_artifacts/OpenRevo-*-x64.exe
           archive: false
-      - uses: actions/upload-artifact@7
+      - uses: actions/upload-artifact@v7
         with:
           name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-x64-Setup.exe
           path: dist_artifacts/OpenRevo-*-x64-Setup.exe
