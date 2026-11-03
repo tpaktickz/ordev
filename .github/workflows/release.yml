@@ -110,12 +110,22 @@ jobs:
           echo "tag_name=$tag" >> $env:GITHUB_OUTPUT
           echo "app_version=$ver" >> $env:GITHUB_OUTPUT
 
-      - name: Upload Build Artifacts (Workflow Storage)
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
         with:
-          name: open-revo-artifacts-${{ steps.prepare_artifacts.outputs.tag_name }}
-          path: dist_artifacts/*
-          if-no-files-found: error
+          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-x64.exe
+          path: dist_artifacts/OpenRevo-*-x64.exe
+          archive: false
+      - uses: actions/upload-artifact@v3
+        with:
+          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-x64-Setup.exe
+          path: dist_artifacts/OpenRevo-*-x64-Setup.exe
+          archive: false
+      - uses: actions/upload-artifact@v3
+        with:
+          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-checksums.txt
+          path: dist_artifacts/checksums.txt
+          archive: false
 
       - name: Publish GitHub Release (Tag / Dispatch)
         uses: softprops/action-gh-release@v3
