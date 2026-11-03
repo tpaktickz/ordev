@@ -27,19 +27,15 @@ jobs:
 
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - name: Setup Node.js & pnpm
+        uses: pnpm/setup@v1
         with:
-          node-version: 20
-
-      - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
+          version: 11
+          runtime: node@20
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -72,12 +68,6 @@ jobs:
 
       # ------------------------------------------------------------------------
       # [Open Source Code Signing Hook - Reserved for SignPath / Trusted Signing]
-      # When approved for free open source signing, insert the signing action here:
-      # - name: Sign Executable & Installer
-      #   uses: signpath/github-action-submit-signing-request@v1
-      #   with:
-      #     api-token: '${{ secrets.SIGNPATH_API_TOKEN }}'
-      #     ...
       # ------------------------------------------------------------------------
 
       - name: Prepare Artifacts & Calculate Hashes
@@ -91,17 +81,14 @@ jobs:
           $distDir = "dist_artifacts"
           New-Item -ItemType Directory -Path $distDir -Force | Out-Null
 
-          # 1. Standalone Exe
           $srcExe = "src-tauri/target/release/open-revo.exe"
           $destExe = "$distDir/open-revo.exe"
           Copy-Item -LiteralPath $srcExe -Destination $destExe -Force
 
-          # 2. Portable 7z Archive
           $portableName = "OpenRevo-${tag}-portable.7z"
           $dest7z = "$distDir/$portableName"
           & 7z a -t7z -mx=9 "$dest7z" "$destExe"
 
-          # 3. NSIS Installer
           $nsisSourceDir = "src-tauri/target/release/bundle/nsis"
           $matchedNsis = Get-ChildItem -Path $nsisSourceDir -Filter "*.exe" | Select-Object -First 1
           if ($matchedNsis) {
@@ -111,7 +98,6 @@ jobs:
               Write-Host "Found NSIS Installer: $installerName" -ForegroundColor Cyan
           }
 
-          # 4. Generate SHA256 Checksums
           $checksumFile = "$distDir/checksums.txt"
           Get-ChildItem -Path $distDir -Filter "*.*" | Where-Object { $_.Name -ne "checksums.txt" } | ForEach-Object {
               $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower()
@@ -121,19 +107,18 @@ jobs:
           Write-Host "=== Artifacts Prepared ===" -ForegroundColor Green
           Get-Content $checksumFile
 
-          # Set output for subsequent steps
           echo "tag_name=$tag" >> $env:GITHUB_OUTPUT
           echo "app_version=$ver" >> $env:GITHUB_OUTPUT
 
       - name: Upload Build Artifacts (Workflow Storage)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: open-revo-artifacts-${{ steps.prepare_artifacts.outputs.tag_name }}
           path: dist_artifacts/*
           if-no-files-found: error
 
       - name: Publish GitHub Release (Tag / Dispatch)
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.draft == 'true'
         with:
           name: OpenRevo ${{ steps.prepare_artifacts.outputs.tag_name }}
