@@ -124,7 +124,7 @@ jobs:
       - uses: actions/upload-artifact@v7
         with:
           name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-protable.exe
-          path: dist_artifacts/OpenRevo-*-protable.exe
+          path: dist_artifacts/OpenRevo-*-portable.exe
           archive: false
       - uses: actions/upload-artifact@v7
         with:
