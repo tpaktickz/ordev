@@ -6,6 +6,11 @@ on:
       - 'v*'
   workflow_dispatch:
     inputs:
+      branch:
+        description: '要编译的分支 / tag / commit SHA（留空则使用触发工作流的分支）'
+        required: false
+        type: string
+        default: ''
       draft:
         description: 'Publish as draft release'
         required: false
@@ -26,9 +31,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository
+      - name: Checkout Repository (${{ github.event.inputs.branch || github.ref_name }})
         uses: actions/checkout@v7
         with:
+          ref: ${{ github.event.inputs.branch || github.ref }}   # ← 新增
           fetch-depth: 0
 
       - name: Setup Node.js & pnpm
