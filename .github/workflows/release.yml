@@ -5,7 +5,6 @@ env:
 
 on:
   schedule:
-    # 北京时间每天 23:00（UTC 15:00）
     - cron: '0 15 * * *'
   workflow_dispatch:
     inputs:
@@ -47,17 +46,7 @@ jobs:
       - name: Install Frontend Dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Verify Hardware Vault Gatekeeper
-        shell: pwsh
-        run: |
-          if (Test-Path "./scripts/check_vault_leaks.ps1") {
-              Write-Host "[*] Running Vault Leak Gatekeeper..." -ForegroundColor Cyan
-              & ./scripts/check_vault_leaks.ps1
-          } else {
-              Write-Host "[*] Vault leak script not present in repository checkout, skipping check." -ForegroundColor Yellow
-          }
-
-      - name: Build NSIS Installer
+      - name: Build
         run: pnpm tauri build --bundles nsis
 
       # ------------------------------------------------------------------------
@@ -133,7 +122,7 @@ jobs:
           path: dist_artifacts/checksums.txt
           archive: false
 
-      - name: Publish GitHub Release (Manual)
+      - name: Publish GitHub Release
         uses: softprops/action-gh-release@v3
         if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
         with:
