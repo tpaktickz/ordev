@@ -142,3 +142,12 @@ jobs:
           name: OpenRevo ${{ steps.prepare_artifacts.outputs.tag_name }}
           tag_name: ${{ steps.prepare_artifacts.outputs.tag_name }}
           files: dist_artifacts/*
+          
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
+          delete_workflow_pattern: "Release & Cloud Build"           
+          retain_days: 30
+          keep_minimum_runs: 6
