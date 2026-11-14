@@ -57,9 +57,6 @@ jobs:
               Write-Host "[*] Vault leak script not present in repository checkout, skipping check." -ForegroundColor Yellow
           }
 
-      - name: Build Standalone Executable
-        run: pnpm tauri build --no-bundle
-
       - name: Build NSIS Installer
         run: pnpm tauri build --bundles nsis
 
