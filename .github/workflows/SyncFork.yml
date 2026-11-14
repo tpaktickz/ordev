@@ -1,0 +1,18 @@
+name: Sync fork dev from upstream
+
+on:
+  schedule:
+    - cron: '0 2 * * *'   # 每天 UTC 02:00（北京时间 10:00），按需调整
+  workflow_dispatch:        # 支持手动触发
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # 允许写回本仓库（fork）
+
+    steps:
+      - name: Sync dev branch from upstream
+        run: gh repo sync tpaktickz/ordev --source faintonce/open-revo --branch dev --force
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
