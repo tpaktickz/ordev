@@ -1,16 +1,16 @@
 name: Release & Cloud Build
 
+env:
+  # ↓↓↓ 需要编译其他分支 / tag / commit 时，只改这里 ↓↓↓
+  BUILD_REF: dev
+  # ↑↑↑ ------------------------------------------ ↑↑↑
+
 on:
   schedule:
     # 北京时间每天 23:00（UTC 15:00）
     - cron: '0 15 * * *'
   workflow_dispatch:
     inputs:
-      branch:
-        description: '要编译的分支 / tag / commit SHA（留空则默认 dev）'
-        required: false
-        type: string
-        default: 'dev'
       publish:
         description: '发布 GitHub Release'
         required: false
@@ -26,11 +26,10 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository (${{ github.event.inputs.branch || (github.event_name == 'schedule' && 'dev') || github.ref_name }})
+      - name: Checkout Repository (${{ env.BUILD_REF }})
         uses: actions/checkout@v7
         with:
-          # 优先级：手动输入 branch > 定时任务固定 dev > 触发事件的 ref
-          ref: ${{ github.event.inputs.branch || (github.event_name == 'schedule' && 'dev') || github.ref }}
+          ref: ${{ env.BUILD_REF }}
           fetch-depth: 0
 
       - name: Setup Node.js & pnpm
@@ -74,8 +73,14 @@ jobs:
         shell: pwsh
         run: |
           $ver = (Get-Content "src-tauri/tauri.conf.json" -Raw | ConvertFrom-Json).version
-          $tag = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { "v$ver-dev" }
-          Write-Host "Target Version: $ver | Tag: $tag" -ForegroundColor Green
+
+          # 把 BUILD_REF 中文件名/tag 不允许的字符替换成 -
+          $rawRef  = $env:BUILD_REF
+          $safeRef = ($rawRef -replace '[\\/:*?"<>| ]', '-').Trim('-')
+          if ([string]::IsNullOrWhiteSpace($safeRef)) { $safeRef = 'unknown' }
+
+          $tag = "v$ver-$safeRef"
+          Write-Host "Target Version: $ver | Ref: $rawRef | Tag: $tag" -ForegroundColor Green
 
           $distDir = "dist_artifacts"
           New-Item -ItemType Directory -Path $distDir -Force | Out-Null
@@ -108,6 +113,7 @@ jobs:
 
           echo "tag_name=$tag" >> $env:GITHUB_OUTPUT
           echo "app_version=$ver" >> $env:GITHUB_OUTPUT
+          echo "safe_ref=$safeRef" >> $env:GITHUB_OUTPUT
 
       - name: Upload Build Artifacts
         uses: actions/upload-artifact@v7
@@ -122,7 +128,7 @@ jobs:
           archive: false
       - uses: actions/upload-artifact@v7
         with:
-          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-protable.exe
+          name: OpenRevo-${{ steps.prepare_artifacts.outputs.tag_name }}-portable.7z
           path: dist_artifacts/OpenRevo-*-portable.7z
           archive: false
       - uses: actions/upload-artifact@v7
