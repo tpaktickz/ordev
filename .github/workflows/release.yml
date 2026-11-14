@@ -142,4 +142,3 @@ jobs:
           name: OpenRevo ${{ steps.prepare_artifacts.outputs.tag_name }}
           tag_name: ${{ steps.prepare_artifacts.outputs.tag_name }}
           files: dist_artifacts/*
-          generate_release_notes: true
