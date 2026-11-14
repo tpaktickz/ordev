@@ -1,23 +1,18 @@
 name: Release & Cloud Build
 
 on:
-  push:
-    tags:
-      - 'v*'
+  schedule:
+    # 北京时间每天 23:00（UTC 15:00）
+    - cron: '0 15 * * *'
   workflow_dispatch:
     inputs:
       branch:
-        description: '要编译的分支 / tag / commit SHA（留空则使用触发工作流的分支）'
+        description: '要编译的分支 / tag / commit SHA（留空则默认 dev）'
         required: false
         type: string
-        default: ''
-      draft:
-        description: 'Publish as draft release'
-        required: false
-        type: boolean
-        default: false
-      prerelease:
-        description: 'Mark as prerelease'
+        default: 'dev'
+      publish:
+        description: '发布 GitHub Release'
         required: false
         type: boolean
         default: false
@@ -31,10 +26,11 @@ jobs:
     runs-on: windows-latest
 
     steps:
-      - name: Checkout Repository (${{ github.event.inputs.branch || github.ref_name }})
+      - name: Checkout Repository (${{ github.event.inputs.branch || (github.event_name == 'schedule' && 'dev') || github.ref_name }})
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch || github.ref }}   # ← 新增
+          # 优先级：手动输入 branch > 定时任务固定 dev > 触发事件的 ref
+          ref: ${{ github.event.inputs.branch || (github.event_name == 'schedule' && 'dev') || github.ref }}
           fetch-depth: 0
 
       - name: Setup Node.js & pnpm
@@ -135,13 +131,11 @@ jobs:
           path: dist_artifacts/checksums.txt
           archive: false
 
-      - name: Publish GitHub Release (Tag / Dispatch)
+      - name: Publish GitHub Release (Manual)
         uses: softprops/action-gh-release@v3
-        if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.draft == 'true'
+        if: github.event_name == 'workflow_dispatch' && github.event.inputs.publish == 'true'
         with:
           name: OpenRevo ${{ steps.prepare_artifacts.outputs.tag_name }}
           tag_name: ${{ steps.prepare_artifacts.outputs.tag_name }}
-          draft: ${{ github.event.inputs.draft == 'true' }}
-          prerelease: ${{ github.event.inputs.prerelease == 'true' }}
           files: dist_artifacts/*
           generate_release_notes: true
