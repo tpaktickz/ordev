@@ -1,15 +1,15 @@
-name: Sync fork dev from upstream
+name: Syncfork-dev
 
 on:
   schedule:
-    - cron: '0 2 * * *'   # 每天 UTC 02:00（北京时间 10:00），按需调整
-  workflow_dispatch:        # 支持手动触发
+    - cron: '0 14 * * *'
+  workflow_dispatch:
 
 jobs:
   sync:
     runs-on: ubuntu-latest
     permissions:
-      contents: write       # 允许写回本仓库（fork）
+      contents: write 
 
     steps:
       - name: Sync dev branch from upstream
