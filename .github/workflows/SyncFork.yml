@@ -16,3 +16,11 @@ jobs:
         run: gh repo sync tpaktickz/ordev --source faintonce/open-revo --branch dev --force
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Delete old workflow runs
+        uses: Mattraks/delete-workflow-runs@main
+        with:
+          retain_days: 0
+          keep_minimum_runs: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+          repository: ${{ github.repository }}
