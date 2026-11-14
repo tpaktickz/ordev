@@ -1,9 +1,7 @@
 name: Release & Cloud Build
 
 env:
-  # ↓↓↓ 需要编译其他分支 / tag / commit 时，只改这里 ↓↓↓
   BUILD_REF: dev
-  # ↑↑↑ ------------------------------------------ ↑↑↑
 
 on:
   schedule:
