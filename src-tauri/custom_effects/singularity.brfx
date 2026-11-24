@@ -1,0 +1,62 @@
+// ==========================================
+// @name: 引力黑洞 (Singularity)
+// @author: OpenRevo Community
+// @version: 1.0.0
+// @description: 时空曲率吸积盘剧烈旋转，事件视界吞噬光芒，击键触发引力红移坍缩
+// @tags: 宇宙, 黑洞, 吸积盘, 相对论
+// @default_speed: 1.5
+// @default_scale: 1.0
+// @default_direction: 0
+// @default_reactive: true
+// @default_color: #8B5CF6
+// ==========================================
+
+fn render_key(kx, ky, ctx) {
+    let center_x = 8.5;
+    let center_y = 2.5;
+    let dx = (kx - center_x) / ctx.scale;
+    let dy = ((ky - center_y) * 1.5) / ctx.scale;
+    let r_dist = sqrt(dx * dx + dy * dy);
+    let angle = atan2(dy, dx);
+
+    let t = ctx.t * ctx.speed;
+
+    // 事件视界半径 (中心绝对全黑)
+    let event_horizon = 1.2;
+    if r_dist < event_horizon {
+        return [0.0, 0.0, 0.0];
+    }
+
+    // 吸积盘螺旋物质流
+    let spin = t * 2.5 - r_dist * 1.2;
+    let spiral = sin(angle * 3.0 + spin);
+
+    let r = 0.0;
+    let g = 0.0;
+    let b = 0.0;
+
+    // 光子球强引力透镜高光环 (1.2 ~ 2.0)
+    if r_dist >= event_horizon && r_dist < 2.0 {
+        let ring_intensity = (1.0 - (r_dist - event_horizon) / 0.8);
+        r = 255.0 * ring_intensity;
+        g = 220.0 * ring_intensity;
+        b = 255.0 * ring_intensity;
+    } else if r_dist < 7.5 {
+        // 吸积盘炽热等离子体多普勒红移
+        let disk_intensity = (1.0 - (r_dist - 2.0) / 5.5) * (0.6 + 0.4 * spiral);
+        let doppler = cos(angle); // 迎向观测者蓝移，背向红移
+        if doppler > 0.0 {
+            // 相对论蓝移喷流 (高能青紫)
+            r = (180.0 + 75.0 * doppler) * disk_intensity;
+            g = (100.0 + 100.0 * doppler) * disk_intensity;
+            b = 255.0 * disk_intensity;
+        } else {
+            // 相对论红移 (深红橙黄)
+            r = 255.0 * disk_intensity;
+            g = (120.0 + 80.0 * doppler) * disk_intensity;
+            b = 40.0 * disk_intensity;
+        }
+    }
+
+    return [clamp(r, 0.0, 255.0), clamp(g, 0.0, 255.0), clamp(b, 0.0, 255.0)];
+}

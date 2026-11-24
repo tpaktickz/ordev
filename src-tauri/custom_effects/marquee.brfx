@@ -1,0 +1,52 @@
+// ==========================================
+// @name: 文字弹幕 (Cyber Marquee)
+// @author: OpenRevo Community
+// @version: 1.0.0
+// @description: 顶天立地大字体从右向左全盘流动滚动，自适应大写英文与数字，智能避让下沉方向键保持纯正矩形排版
+// @tags: 弹幕, 文字, 走马灯, 赛博朋克, 霓虹
+// @default_speed: 1.0
+// @default_scale: 1.0
+// @default_direction: 0
+// @default_reactive: false
+// @default_color: #00F0FF
+// @default_text: I LOVE OPEN-REVO
+// ==========================================
+
+fn render_key(kx, ky, ctx) {
+    // 关键优化：忽略键盘右下方凸出的下沉三方向键（Left/Down/Right），保持大文字矩形平整不发生畸变
+    if ky > 5.05 {
+        return [0.0, 0.0, 0.0];
+    }
+
+    let text = if ctx.text != "" { ctx.text } else { "I LOVE OPEN-REVO" };
+    let speed = ctx.speed * 6.5;
+    
+    // 滚动总偏移：从键盘右端向左行进
+    let offset_x = kx - 19.0 + ctx.t * speed;
+    let hit = sample_text(text, offset_x, ky);
+
+    let r = 0.0;
+    let g = 0.0;
+    let b = 0.0;
+
+    // 深邃宇宙幽蓝夜光背景 (保证整张键盘在暗光下轮廓清晰可用)
+    r += 3.0;
+    g += 8.0;
+    b += 18.0;
+
+    if hit > 0.05 {
+        // 文字本体：亮丽高能霓虹色（随位置产生赛博彩虹色散）
+        let hue = ((kx * 12.0 - ctx.t * 30.0) % 360.0);
+        if hue < 0.0 { hue += 360.0; }
+        
+        let c = hsv(hue, 0.95, hit);
+        
+        // 核心加纯白爆亮高光
+        let white_core = hit * hit * 60.0;
+        r = c[0] + white_core;
+        g = c[1] + white_core;
+        b = c[2] + white_core;
+    }
+
+    return [clamp(r, 0.0, 255.0), clamp(g, 0.0, 255.0), clamp(b, 0.0, 255.0)];
+}

@@ -127,5 +127,21 @@ pub fn run_main_standalone() {
         },
     );
 
-    let _ = window.run();
+    // `Window::run()` quits as soon as the last window is hidden, because hiding
+    // releases Slint's per-window keepalive (`i-slint-core/src/window.rs:1946`).
+    // The companion is a daemon that starts hidden and is shown by the host over
+    // stdin, so on Linux it must use the until-quit entry point instead; the host
+    // ends it explicitly with `{"action":"quit"}`.
+    #[cfg(windows)]
+    {
+        let _ = window.run();
+    }
+    #[cfg(not(windows))]
+    {
+        // The component itself must outlive the loop: dropping it tears the window
+        // down and every later IPC `show` would act on a dead weak handle. Hiding
+        // it only releases the loop keepalive, which `until_quit` ignores.
+        let _keep_alive = window;
+        let _ = slint::run_event_loop_until_quit();
+    }
 }
