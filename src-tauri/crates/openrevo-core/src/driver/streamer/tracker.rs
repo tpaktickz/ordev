@@ -214,7 +214,7 @@ impl KeyTracker {
 
         let now = std::time::Instant::now();
         for &vk in TRACK_VKS {
-            let is_down = unsafe { (windows::Win32::UI::Input::KeyboardAndMouse::GetAsyncKeyState(vk) as u16 & 0x8000) != 0 };
+            let is_down = crate::pal::input::key_down(vk).unwrap_or(false);
             let idx = (vk as usize) & 0xFF;
             if is_down {
                 if !self.was_down[idx] {

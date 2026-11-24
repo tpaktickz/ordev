@@ -417,26 +417,14 @@ pub fn handle(action: &str, val: &serde_json::Value, ui: &MainWindow) -> bool {
                     crate::window::align_mini_drawer_to_tray(hwnd, 395, 632);
                 }
                 crate::window::mark_window_woken();
-                unsafe {
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        BringWindowToTop, SetForegroundWindow, ShowWindow, SW_RESTORE, SW_SHOW,
-                    };
-                    let _ = ShowWindow(hwnd, SW_RESTORE);
-                    let _ = ShowWindow(hwnd, SW_SHOW);
-                    let _ = BringWindowToTop(hwnd);
-                    let _ = SetForegroundWindow(hwnd);
-                    crate::window::trigger_full_redraw(hwnd);
-                }
+                crate::window::present_window(hwnd);
                 crate::ipc::send_action_to_host("slint_window_shown", serde_json::json!({}));
             }
             true
         }
         "hide" | "quit" | "shutdown" | "exit" => {
             if let Some(h) = *crate::window::HWND_HOLDER.lock().unwrap() {
-                unsafe {
-                    use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
-                    let _ = ShowWindow(h.to_hwnd(), SW_HIDE);
-                }
+                crate::window::hide_window(h.to_hwnd());
             }
             std::thread::sleep(std::time::Duration::from_millis(30));
             std::process::exit(0);
@@ -451,30 +439,21 @@ pub fn handle(action: &str, val: &serde_json::Value, ui: &MainWindow) -> bool {
                 }
             }
             if let Some(h) = hwnd_opt {
-                unsafe {
-                    use windows::Win32::UI::WindowsAndMessaging::{
-                        IsIconic, IsWindowVisible, SetForegroundWindow, ShowWindow, SW_HIDE,
-                        SW_RESTORE, SW_SHOW,
-                    };
-                    let hwnd = h.to_hwnd();
-                    if IsWindowVisible(hwnd).as_bool() && !IsIconic(hwnd).as_bool() {
-                        let _ = ShowWindow(hwnd, SW_HIDE);
-                        std::thread::sleep(std::time::Duration::from_millis(30));
-                        std::process::exit(0);
+                let hwnd = h.to_hwnd();
+                if crate::window::is_window_present(hwnd) {
+                    crate::window::hide_window(hwnd);
+                    std::thread::sleep(std::time::Duration::from_millis(30));
+                    std::process::exit(0);
+                } else {
+                    if ui.get_is_expanded() {
+                        let saved = *crate::window::SAVED_FULL_POS.lock().unwrap();
+                        crate::window::expand_native_window(hwnd, 1120, 760, saved);
                     } else {
-                        if ui.get_is_expanded() {
-                            let saved = *crate::window::SAVED_FULL_POS.lock().unwrap();
-                            crate::window::expand_native_window(hwnd, 1120, 760, saved);
-                        } else {
-                            crate::window::align_mini_drawer_to_tray(hwnd, 395, 632);
-                        }
-                        crate::window::mark_window_woken();
-                        let _ = ShowWindow(hwnd, SW_RESTORE);
-                        let _ = ShowWindow(hwnd, SW_SHOW);
-                        let _ = SetForegroundWindow(hwnd);
-                        crate::window::trigger_full_redraw(hwnd);
-                        crate::ipc::send_action_to_host("slint_window_shown", serde_json::json!({}));
+                        crate::window::align_mini_drawer_to_tray(hwnd, 395, 632);
                     }
+                    crate::window::mark_window_woken();
+                    crate::window::present_window(hwnd);
+                    crate::ipc::send_action_to_host("slint_window_shown", serde_json::json!({}));
                 }
             }
             true

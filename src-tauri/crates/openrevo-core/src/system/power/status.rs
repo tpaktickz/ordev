@@ -1,8 +1,11 @@
+#[cfg(windows)]
 use windows::core::{PCWSTR, PWSTR};
+#[cfg(windows)]
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ, REG_SZ,
 };
 
+#[cfg(windows)]
 #[repr(C)]
 struct SYSTEM_POWER_STATUS {
     ac_line_status: u8,
@@ -13,10 +16,12 @@ struct SYSTEM_POWER_STATUS {
     battery_full_life_time: u32,
 }
 
+#[cfg(windows)]
 extern "system" {
     fn GetSystemPowerStatus(lpSystemPowerStatus: *mut SYSTEM_POWER_STATUS) -> i32;
 }
 
+#[cfg(windows)]
 pub fn get_live_power_status() -> (u8, bool, bool) {
     let mut status = SYSTEM_POWER_STATUS {
         ac_line_status: 1,
@@ -39,6 +44,37 @@ pub fn get_live_power_status() -> (u8, bool, bool) {
     } else {
         (100, true, false)
     }
+}
+
+/// Linux: power_supply sysfs. Reported as (percent, is_ac, is_charging).
+#[cfg(not(windows))]
+pub fn get_live_power_status() -> (u8, bool, bool) {
+    let entries = match std::fs::read_dir("/sys/class/power_supply") {
+        Ok(entries) => entries,
+        Err(_) => return (100, true, false),
+    };
+    let mut percent = 100u8;
+    let mut is_ac = false;
+    let mut is_charging = false;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let kind = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+        let kind = kind.trim();
+        if kind == "Mains" || kind == "USB" || kind == "USB_C" {
+            let online = std::fs::read_to_string(path.join("online")).unwrap_or_default();
+            if online.trim() == "1" {
+                is_ac = true;
+            }
+        } else if kind == "Battery" {
+            if let Ok(cap) = std::fs::read_to_string(path.join("capacity")) {
+                percent = cap.trim().parse::<u8>().unwrap_or(100).min(100);
+            }
+            let state = std::fs::read_to_string(path.join("status")).unwrap_or_default();
+            let state = state.trim();
+            is_charging = state == "Charging" || state == "Full";
+        }
+    }
+    (percent, is_ac, is_charging)
 }
 
 static DGPU_CACHE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();

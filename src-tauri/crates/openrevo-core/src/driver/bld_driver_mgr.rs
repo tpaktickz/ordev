@@ -418,6 +418,7 @@ const SERVICE_ERROR_NORMAL: u32 = 0x00000001;
 #[allow(dead_code)]
 const SERVICE_CONTROL_STOP: u32 = 0x00000001;
 
+#[cfg(windows)]
 #[link(name = "advapi32")]
 extern "system" {
     fn OpenSCManagerW(
@@ -480,10 +481,112 @@ extern "system" {
     fn CloseServiceHandle(hSCObject: isize) -> i32;
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn GetLastError() -> u32;
 }
+
+/// Linux: theService Control Manager does not exist here. Every SCM entry point
+/// keeps its Win32 signature and fails like an unelevated caller would: the SCM
+/// handle is 0 and `GetLastError` reports ERROR_FILE_NOT_FOUND (2).
+#[cfg(not(windows))]
+mod scm_stub {
+    #[inline]
+    fn wide(_p: *const u16) -> usize {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc, clippy::too_many_arguments)]
+    pub unsafe fn OpenSCManagerW(
+        lpMachineName: *const u16,
+        lpDatabaseName: *const u16,
+        dwDesiredAccess: u32,
+    ) -> isize {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn OpenServiceW(
+        hSCManager: isize,
+        lpServiceName: *const u16,
+        dwDesiredAccess: u32,
+    ) -> isize {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc, clippy::too_many_arguments)]
+    pub unsafe fn CreateServiceW(
+        hSCManager: isize,
+        lpServiceName: *const u16,
+        lpDisplayName: *const u16,
+        dwDesiredAccess: u32,
+        dwServiceType: u32,
+        dwStartType: u32,
+        dwErrorControl: u32,
+        lpBinaryPathName: *const u16,
+        lpLoadOrderGroup: *const u16,
+        lpdwTagId: *mut u32,
+        lpDependencies: *const u16,
+        lpServiceStartName: *const u16,
+        lpPassword: *const u16,
+    ) -> isize {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc, clippy::too_many_arguments)]
+    pub unsafe fn ChangeServiceConfigW(
+        hService: isize,
+        dwServiceType: u32,
+        dwStartType: u32,
+        dwErrorControl: u32,
+        lpBinaryPathName: *const u16,
+        lpLoadOrderGroup: *const u16,
+        lpdwTagId: *mut u32,
+        lpDependencies: *const u16,
+        lpServiceStartName: *const u16,
+        lpPassword: *const u16,
+        lpDisplayName: *const u16,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn StartServiceW(
+        hService: isize,
+        dwNumServiceArgs: u32,
+        lpServiceArgVectors: *const *const u16,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn ControlService(
+        hService: isize,
+        dwControl: u32,
+        lpServiceStatus: *mut u8,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn DeleteService(hService: isize) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn CloseServiceHandle(hSCObject: isize) -> i32 {
+        0
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn GetLastError() -> u32 {
+        2
+    }
+}
+
+#[cfg(not(windows))]
+use scm_stub::*;
 
 type FnInitializeBldring = unsafe extern "system" fn() -> bool;
 type FnShutdownBldring = unsafe extern "system" fn();
@@ -649,6 +752,7 @@ impl BldDriverManager {
         ))
     }
 
+    #[cfg(windows)]
     fn ensure_service_started(sys_path: &Path) -> Result<(), String> {
         // If legacy JiaoLongDriver64 is running from a third-party tool, stop it first to prevent NT device collision
         Self::stop_and_delete_service("JiaoLongDriver64");
@@ -762,6 +866,18 @@ impl BldDriverManager {
         }
 
         Ok(())
+    }
+
+    /// Linux: `bldring64.sys` is a Windows kernel driver and `Bldring64.dll` a
+    /// PE library, so neither the SCM nor `LoadLibrary` applies. The BLD fan and
+    /// rainbow controls therefore report "unavailable" and every consumer falls
+    /// back to the EC paths. A Linux port is tracked in the port plan (P3).
+    #[cfg(not(windows))]
+    fn ensure_service_started(sys_path: &Path) -> Result<(), String> {
+        Err(format!(
+            "Baolongda driver is a Windows kernel driver ({}); no kernel service on this build",
+            sys_path.display()
+        ))
     }
 
     fn init_internal() -> Result<Self, String> {

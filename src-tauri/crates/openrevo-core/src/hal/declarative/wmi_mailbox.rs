@@ -3,29 +3,40 @@
 // Uses a dedicated in-process COM Worker Actor to guarantee 100% thread safety,
 // eliminate powershell.exe process spawn overhead, and achieve sub-millisecond execution.
 
+#[cfg(windows)]
 use std::sync::mpsc::{channel, Receiver, Sender};
+#[cfg(windows)]
 use std::sync::LazyLock;
+#[cfg(windows)]
 use std::thread;
+#[cfg(windows)]
 use std::time::{Duration, Instant};
 
+#[cfg(windows)]
 use windows::core::{w, BSTR, VARIANT};
+#[cfg(windows)]
 use windows::Win32::System::Com::{
     CoCreateInstance, CoInitializeEx, CoSetProxyBlanket, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED,
     RPC_C_AUTHN_LEVEL_PKT_PRIVACY, RPC_C_IMP_LEVEL_IMPERSONATE, EOAC_NONE, SAFEARRAY,
 };
+#[cfg(windows)]
 use windows::Win32::System::Ole::{
     SafeArrayAccessData, SafeArrayCreateVector, SafeArrayDestroy, SafeArrayGetLBound, SafeArrayGetUBound,
     SafeArrayUnaccessData,
 };
+#[cfg(windows)]
 use windows::Win32::System::Variant::{VT_ARRAY, VT_UI1};
+#[cfg(windows)]
 use windows::Win32::System::Wmi::{
     IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, WBEM_FLAG_FORWARD_ONLY,
     WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_GENERIC_FLAG_TYPE,
 };
 
+#[cfg(windows)]
 const RPC_C_AUTHN_WINNT: u32 = 10;
 const RPC_C_AUTHZ_NONE: u32 = 0;
 
+#[cfg(windows)]
 const CANDIDATE_INSTANCES: &[&str] = &[
     r"ACPI\PNP0C14\HWMI_0",
     r"ACPI\PNP0C14\MIFS_0",
@@ -35,6 +46,7 @@ const CANDIDATE_INSTANCES: &[&str] = &[
     r"ACPI\PNP0C14\HWMI",
 ];
 
+#[cfg(windows)]
 struct MailboxTask {
     namespace: String,
     class_name: String,
@@ -45,12 +57,15 @@ struct MailboxTask {
     resp: Sender<Result<Vec<u8>, String>>,
 }
 
+#[cfg(windows)]
 struct MailboxWorker {
     tx: Sender<MailboxTask>,
 }
 
+#[cfg(windows)]
 static WORKER: LazyLock<Option<MailboxWorker>> = LazyLock::new(init_worker);
 
+#[cfg(windows)]
 fn init_worker() -> Option<MailboxWorker> {
     let (tx, rx) = channel::<MailboxTask>();
 
@@ -64,6 +79,7 @@ fn init_worker() -> Option<MailboxWorker> {
     Some(MailboxWorker { tx })
 }
 
+#[cfg(windows)]
 unsafe fn bytes_to_variant(data: &[u8]) -> Option<VARIANT> {
     let sa = SafeArrayCreateVector(VT_UI1, 0, data.len() as u32);
     if sa.is_null() {
@@ -93,6 +109,7 @@ unsafe fn bytes_to_variant(data: &[u8]) -> Option<VARIANT> {
     Some(VARIANT::from_raw(raw_var))
 }
 
+#[cfg(windows)]
 unsafe fn variant_to_bytes(var: &VARIANT) -> Option<Vec<u8>> {
     let vt = var.as_raw().Anonymous.Anonymous.vt;
     if (vt & VT_ARRAY.0 as u16) == 0 {
@@ -116,6 +133,7 @@ unsafe fn variant_to_bytes(var: &VARIANT) -> Option<Vec<u8>> {
     Some(result)
 }
 
+#[cfg(windows)]
 fn worker_loop(rx: Receiver<MailboxTask>) {
     unsafe {
         let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -136,6 +154,7 @@ fn worker_loop(rx: Receiver<MailboxTask>) {
     }
 }
 
+#[cfg(windows)]
 unsafe fn get_or_connect_services<'a>(
     locator_opt: &'a mut Option<IWbemLocator>,
     cached_ns: &mut String,
@@ -180,6 +199,7 @@ unsafe fn get_or_connect_services<'a>(
     Ok(cached_services.as_ref().unwrap())
 }
 
+#[cfg(windows)]
 unsafe fn query_instance_path(
     services: &IWbemServices,
     class_name: &str,
@@ -255,6 +275,7 @@ unsafe fn query_instance_path(
     Err(format!("No matching WMI instance found for class '{}'", class_name))
 }
 
+#[cfg(windows)]
 unsafe fn resolve_instance_path(
     services: &IWbemServices,
     class_name: &str,
@@ -272,6 +293,7 @@ unsafe fn resolve_instance_path(
     Err(format!("Cannot bind WMI mailbox instance for class '{}'", class_name))
 }
 
+#[cfg(windows)]
 unsafe fn execute_mailbox_task(
     locator_opt: &mut Option<IWbemLocator>,
     cached_ns: &mut String,
@@ -372,6 +394,7 @@ unsafe fn execute_mailbox_task(
 /// `in_data`: input byte array (will be padded or clamped to `in_size`).
 /// `in_size`: expected input buffer size (e.g. 64 for Xingyao 14).
 /// `out_size`: expected output buffer size (e.g. 256 for Xingyao 14).
+#[cfg(windows)]
 pub fn invoke_wmi_mailbox(
     namespace: &str,
     class_name: &str,
@@ -399,6 +422,23 @@ pub fn invoke_wmi_mailbox(
     resp_rx
         .recv_timeout(Duration::from_millis(3000))
         .map_err(|e| format!("WMI Mailbox call timed out or worker disconnected: {}", e))?
+}
+
+/// WMI has no Linux transport; callers of declarative Wmi channels get a
+/// descriptive error instead of a silent zero.
+#[cfg(not(windows))]
+pub fn invoke_wmi_mailbox(
+    namespace: &str,
+    class_name: &str,
+    method_name: &str,
+    _in_data: &[u8],
+    _in_size: usize,
+    _out_size: usize,
+) -> Result<Vec<u8>, String> {
+    Err(format!(
+        "WMI transport unavailable on {} (needed {namespace}:{class_name}.{method_name})",
+        crate::pal::tag()
+    ))
 }
 
 /// Helper to extract integer value from raw output buffer

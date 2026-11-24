@@ -6,6 +6,7 @@ pub mod engine;
 pub mod event;
 pub mod hal;
 pub mod driver;
+pub mod pal;
 pub mod system;
 
 pub use engine::OpenRevoEngine;

@@ -92,6 +92,7 @@ pub struct LASTINPUTINFO {
     pub dw_time: u32,
 }
 
+#[cfg(windows)]
 #[link(name = "hid")]
 extern "system" {
     pub fn HidD_GetHidGuid(hid_guid: *mut GUID);
@@ -111,6 +112,7 @@ extern "system" {
     ) -> BOOLEAN;
 }
 
+#[cfg(windows)]
 #[link(name = "setupapi")]
 extern "system" {
     pub fn SetupDiGetClassDevsW(
@@ -137,6 +139,7 @@ extern "system" {
     pub fn SetupDiDestroyDeviceInfoList(device_info_set: *mut c_void) -> i32;
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     pub fn CreateFileW(
@@ -182,6 +185,7 @@ extern "system" {
 pub const THREAD_PRIORITY_ABOVE_NORMAL: i32 = 1;
 pub const THREAD_PRIORITY_HIGHEST: i32 = 2;
 
+#[cfg(windows)]
 #[link(name = "user32")]
 extern "system" {
     pub fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
@@ -189,6 +193,7 @@ extern "system" {
 }
 
 /// Calculate system idle duration in milliseconds using GetLastInputInfo and GetTickCount
+#[cfg(windows)]
 pub fn get_system_idle_ms() -> u64 {
     unsafe {
         let mut lii = LASTINPUTINFO {
@@ -210,115 +215,274 @@ pub fn get_system_idle_ms() -> u64 {
 
 /// Query whether a virtual key is currently pressed
 #[inline]
+#[cfg(windows)]
 pub fn is_key_down(v_key: i32) -> bool {
     unsafe { (GetAsyncKeyState(v_key) as u16 & 0x8000) != 0 }
 }
 
-// --- Windows Registry Helpers for OEM GamingCenter Compatibility Synchronization ---
+// ---------------------------------------------------------------------------
+// Linux HID transport
+//
+// The Win32 HID stack (hid.dll / setupapi / kernel32 device handles) has no
+// equivalent here. Linux exposes the same devices through hidraw; that backend
+// is written in P2 of the port plan. Until it lands, every entry point keeps
+// its exact Win32 signature and fails the way a missing device would, so the
+// callers (lighting, streamer, BLD driver) compile and their error paths run.
+//
+// Windows error semantics reproduced here:
+//   * handle-returning calls  -> INVALID_HANDLE_VALUE
+//   * BOOL-returning calls    -> 0 (FALSE)
+//   * GetLastError()          -> ERROR_FILE_NOT_FOUND (2)
+// ---------------------------------------------------------------------------
+
+#[cfg(not(windows))]
+pub const ERROR_FILE_NOT_FOUND: u32 = 2;
+
+#[cfg(not(windows))]
+pub mod hidraw_placeholder {
+    // Marker module: keeps the split obvious when the real backend is added.
+    pub const BACKEND: &str = "none";
+}
+
+#[cfg(not(windows))]
+mod linux_ffi {
+    use super::*;
+
+    #[inline]
+    fn no_device<T: Default>(_what: &str) -> T {
+        T::default()
+    }
+
+    #[allow(clippy::too_many_arguments, unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_GetHidGuid(hid_guid: *mut GUID) {
+        let _ = no_device::<u8>("HidD_GetHidGuid");
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_GetAttributes(
+        hid_device_object: HANDLE,
+        attributes: *mut HIDD_ATTRIBUTES,
+    ) -> BOOLEAN {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_GetPreparsedData(
+        hid_device_object: HANDLE,
+        preparsed_data: *mut isize,
+    ) -> BOOLEAN {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_FreePreparsedData(preparsed_data: isize) -> BOOLEAN {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidP_GetCaps(preparsed_data: isize, capabilities: *mut HIDP_CAPS) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_SetFeature(
+        hid_device_object: HANDLE,
+        report_buffer: *const c_void,
+        report_buffer_length: u32,
+    ) -> BOOLEAN {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn HidD_GetFeature(
+        hid_device_object: HANDLE,
+        report_buffer: *mut c_void,
+        report_buffer_length: u32,
+    ) -> BOOLEAN {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn SetupDiGetClassDevsW(
+        class_guid: *const GUID,
+        enumerator: *const u16,
+        hwnd_parent: *mut c_void,
+        flags: u32,
+    ) -> *mut c_void {
+        std::ptr::null_mut()
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn SetupDiEnumDeviceInterfaces(
+        device_info_set: *mut c_void,
+        device_info_data: *mut c_void,
+        interface_class_guid: *const GUID,
+        member_index: u32,
+        device_interface_data: *mut SP_DEVICE_INTERFACE_DATA,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn SetupDiGetDeviceInterfaceDetailW(
+        device_info_set: *mut c_void,
+        device_interface_data: *mut SP_DEVICE_INTERFACE_DATA,
+        device_interface_detail_data: *mut u8,
+        device_interface_detail_data_size: u32,
+        required_size: *mut u32,
+        device_info_data: *mut c_void,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn SetupDiDestroyDeviceInfoList(device_info_set: *mut c_void) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn CreateFileW(
+        file_name: *const u16,
+        desired_access: u32,
+        share_mode: u32,
+        security_attributes: *mut c_void,
+        creation_disposition: u32,
+        flags_and_attributes: u32,
+        template_file: *mut c_void,
+    ) -> HANDLE {
+        INVALID_HANDLE_VALUE
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn CloseHandle(object: HANDLE) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn WriteFile(
+        file: HANDLE,
+        buffer: *const c_void,
+        number_of_bytes_to_write: u32,
+        number_of_bytes_written: *mut u32,
+        overlapped: *mut c_void,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn CreateEventW(
+        lpEventAttributes: *mut c_void,
+        bManualReset: i32,
+        bInitialState: i32,
+        lpName: *const u16,
+    ) -> HANDLE {
+        INVALID_HANDLE_VALUE
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn WaitForSingleObject(hHandle: HANDLE, dwMilliseconds: u32) -> u32 {
+        0x0000_0102 // WAIT_FAILED
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn GetOverlappedResult(
+        hFile: HANDLE,
+        lpOverlapped: *mut c_void,
+        lpNumberOfBytesTransferred: *mut u32,
+        bWait: i32,
+    ) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn ResetEvent(hEvent: HANDLE) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn CancelIoEx(hFile: HANDLE, lpOverlapped: *mut c_void) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn QueryPerformanceCounter(lpPerformanceCount: *mut LARGE_INTEGER) -> i32 {
+        1
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn QueryPerformanceFrequency(lpFrequency: *mut LARGE_INTEGER) -> i32 {
+        if !lpFrequency.is_null() {
+            // Nanoseconds clock exposed as counts-per-second.
+            (*lpFrequency).quad_part = 1_000_000_000;
+        }
+        1
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn GetLastError() -> u32 {
+        ERROR_FILE_NOT_FOUND
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn GetTickCount() -> u32 {
+        let uptime = std::fs::read_to_string("/proc/uptime")
+            .ok()
+            .and_then(|s| s.split_whitespace().next().and_then(|v| v.parse::<f64>().ok()))
+            .unwrap_or(0.0);
+        (uptime * 1000.0) as u32
+    }
+
+    #[allow(clippy::missing_safety_doc)]
+    pub unsafe fn GetCurrentThread() -> HANDLE {
+        std::ptr::null_mut()
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn SetThreadPriority(hThread: HANDLE, nPriority: i32) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32 {
+        0
+    }
+
+    #[allow(unused_variables, clippy::missing_safety_doc)]
+    pub unsafe fn GetAsyncKeyState(v_key: i32) -> i16 {
+        0
+    }
+}
+
+#[cfg(not(windows))]
+pub use linux_ffi::*;
+
+/// Idle time is not globally observable on Linux without evdev; report 0 (busy).
+#[cfg(not(windows))]
+#[inline]
+pub fn get_system_idle_ms() -> u64 {
+    0
+}
+
+/// Linux: no global key-state poll until the evdev hook lands (P2).
+#[cfg(not(windows))]
+#[inline]
+pub fn is_key_down(_v_key: i32) -> bool {
+    false
+}
+
+// --- OEM GamingCenter compatibility synchronization ---
+// These used to talk to the Win32 registry directly; the engine only needs the
+// key/value shape, so they now go through the portable registry surface (no-ops
+// on Linux, where nothing reads these keys).
 
 pub fn set_hklm_dword(sub_key: &str, value_name: &str, value: u32) {
-    use windows::core::PCWSTR;
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE,
-        KEY_SET_VALUE, REG_DWORD, REG_OPTION_NON_VOLATILE,
-    };
-    let sub_key_u16: Vec<u16> = sub_key.encode_utf16().chain(std::iter::once(0)).collect();
-    let val_name_u16: Vec<u16> = value_name.encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe {
-        let mut hkey = HKEY::default();
-        if RegCreateKeyExW(
-            HKEY_LOCAL_MACHINE,
-            PCWSTR(sub_key_u16.as_ptr()),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_SET_VALUE,
-            None,
-            &mut hkey,
-            None,
-        ).is_ok() {
-            let _ = RegSetValueExW(
-                hkey,
-                PCWSTR(val_name_u16.as_ptr()),
-                0,
-                REG_DWORD,
-                Some(std::slice::from_raw_parts(&value as *const u32 as *const u8, 4)),
-            );
-            let _ = RegCloseKey(hkey);
-        }
-    }
+    crate::pal::reg::set_dword_or_create(crate::pal::reg::RegRoot::Machine, sub_key, value_name, value);
 }
 
 pub fn set_hklm_sz(sub_key: &str, value_name: &str, value: &str) {
-    use windows::core::PCWSTR;
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegCreateKeyExW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE,
-        KEY_SET_VALUE, REG_SZ, REG_OPTION_NON_VOLATILE,
-    };
-    let sub_key_u16: Vec<u16> = sub_key.encode_utf16().chain(std::iter::once(0)).collect();
-    let val_name_u16: Vec<u16> = value_name.encode_utf16().chain(std::iter::once(0)).collect();
-    let val_bytes_u16: Vec<u16> = value.encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe {
-        let mut hkey = HKEY::default();
-        if RegCreateKeyExW(
-            HKEY_LOCAL_MACHINE,
-            PCWSTR(sub_key_u16.as_ptr()),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_SET_VALUE,
-            None,
-            &mut hkey,
-            None,
-        ).is_ok() {
-            let _ = RegSetValueExW(
-                hkey,
-                PCWSTR(val_name_u16.as_ptr()),
-                0,
-                REG_SZ,
-                Some(std::slice::from_raw_parts(
-                    val_bytes_u16.as_ptr() as *const u8,
-                    val_bytes_u16.len() * 2,
-                )),
-            );
-            let _ = RegCloseKey(hkey);
-        }
-    }
+    crate::pal::reg::set_string(crate::pal::reg::RegRoot::Machine, sub_key, value_name, value);
 }
 
 pub fn read_hklm_dword(sub_key: &str, value_name: &str) -> Option<u32> {
-    use windows::core::PCWSTR;
-    use windows::Win32::System::Registry::{
-        RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_LOCAL_MACHINE,
-        KEY_READ, REG_DWORD,
-    };
-    let sub_key_u16: Vec<u16> = sub_key.encode_utf16().chain(std::iter::once(0)).collect();
-    let val_name_u16: Vec<u16> = value_name.encode_utf16().chain(std::iter::once(0)).collect();
-    unsafe {
-        let mut hkey = HKEY::default();
-        if RegOpenKeyExW(
-            HKEY_LOCAL_MACHINE,
-            PCWSTR(sub_key_u16.as_ptr()),
-            0,
-            KEY_READ,
-            &mut hkey,
-        ).is_ok() {
-            let mut data_type = REG_DWORD;
-            let mut data = 0u32;
-            let mut data_size = std::mem::size_of::<u32>() as u32;
-            let res = RegQueryValueExW(
-                hkey,
-                PCWSTR(val_name_u16.as_ptr()),
-                None,
-                Some(&mut data_type),
-                Some(&mut data as *mut u32 as *mut u8),
-                Some(&mut data_size),
-            );
-            let _ = RegCloseKey(hkey);
-            if res.is_ok() {
-                return Some(data);
-            }
-        }
-    }
-    None
+    crate::pal::reg::read_dword(crate::pal::reg::RegRoot::Machine, sub_key, value_name)
 }

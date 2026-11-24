@@ -118,6 +118,7 @@ struct NativeHardwareProbeResult {
     oc_switch: String,
 }
 
+#[cfg(windows)]
 fn get_reg_sz(subkey: &str, val_name: &str) -> Option<String> {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
@@ -187,8 +188,9 @@ fn query_native_probe() -> NativeHardwareProbeResult {
         os_prod
     };
 
-    // 4. Video Controller Devices (Dynamic PnP Enumeration)
+    // 4. Video Controller Devices (Dynamic PnP Enumeration on Windows)
     let mut gpus = Vec::new();
+    #[cfg(windows)]
     unsafe {
         use windows::core::{PCWSTR, PWSTR};
         use windows::Win32::System::Registry::{
@@ -253,6 +255,39 @@ fn query_native_probe() -> NativeHardwareProbeResult {
                 index += 1;
             }
             let _ = RegCloseKey(h_base);
+        }
+    }
+
+    // 4. Video Controller Devices (sysfs PCI enumeration on Linux)
+    #[cfg(not(windows))]
+    {
+        for entry in std::fs::read_dir("/sys/bus/pci/devices").into_iter().flatten().flatten() {
+            let path = entry.path();
+            let class = std::fs::read_to_string(path.join("class")).unwrap_or_default();
+            let class = class.trim().to_ascii_lowercase();
+            if !(class.starts_with("0x0300") || class.starts_with("0x0302")) {
+                continue;
+            }
+            let vendor = std::fs::read_to_string(path.join("vendor")).unwrap_or_default();
+            let device = std::fs::read_to_string(path.join("device")).unwrap_or_default();
+            let slot = entry.file_name().to_string_lossy().into_owned();
+            let label = std::process::Command::new("lspci")
+                .args(["-s", &slot, "-mm"])
+                .output()
+                .ok()
+                .map(|o| String::from_utf8_lossy(&o.stdout).to_string())
+                .and_then(|text| {
+                    let fields: Vec<&str> = text.split('"').collect();
+                    (fields.len() > 5).then(|| format!("{} {}", fields[3], fields[5]))
+                })
+                .unwrap_or_else(|| format!("PCI {}:{}", vendor.trim(), device.trim()));
+            let upper = label.to_uppercase();
+            if upper.contains("VIRTUAL") || upper.contains("VIRTUALBOX") || upper.contains("BASIC") {
+                continue;
+            }
+            if !gpus.contains(&label) {
+                gpus.push(label);
+            }
         }
     }
 
@@ -661,4 +696,10 @@ mod tests {
         let excerpt: String = json.chars().take(800).collect();
         println!("{}", excerpt);
     }
+}
+
+/// Linux has no registry; DMI is the system identity source.
+#[cfg(not(windows))]
+fn get_reg_sz(_subkey: &str, _val_name: &str) -> Option<String> {
+    None
 }

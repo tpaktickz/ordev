@@ -1,6 +1,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use slint::ComponentHandle;
+#[cfg(windows)]
 use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};
 
 pub use slint;
@@ -77,9 +78,7 @@ pub fn run_main_standalone() {
             window::align_mini_drawer_to_tray(hwnd, 395, 632);
         }
         if !std::env::args().any(|a| a == "--visible") {
-            unsafe {
-                let _ = ShowWindow(hwnd, SW_HIDE);
-            }
+            window::hide_window(hwnd);
         } else {
             window::mark_window_woken();
         }
@@ -110,9 +109,7 @@ pub fn run_main_standalone() {
                         window::align_mini_drawer_to_tray(hwnd, 395, 632);
                     }
                     if !std::env::args().any(|a| a == "--visible") {
-                        unsafe {
-                            let _ = ShowWindow(hwnd, SW_HIDE);
-                        }
+                        window::hide_window(hwnd);
                     }
                     ipc::send_action_to_host("sync_slint_hwnd", serde_json::json!({ "hwnd": hwnd.0 as isize }));
                     *done = true;

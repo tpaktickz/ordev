@@ -1,10 +1,5 @@
 use std::sync::atomic::Ordering;
 use std::sync::{Arc, Mutex};
-use windows::Win32::Foundation::RECT;
-use windows::Win32::UI::WindowsAndMessaging::{
-    GetWindowRect, ShowWindow, SW_HIDE, SW_MAXIMIZE, SW_MINIMIZE, SW_RESTORE,
-};
-
 use crate::ipc;
 use crate::window::{
     align_mini_drawer_to_tray, expand_native_window, SafeHwnd, SAVED_FULL_POS,
@@ -146,14 +141,12 @@ pub fn register(
     window.on_toggle_fullscreen_clicked(move || {
         if let Some(h) = *hwnd_fs.lock().unwrap() {
             let mut fs = is_fs_clone.lock().unwrap();
-            unsafe {
-                if *fs {
-                    let _ = ShowWindow(h.to_hwnd(), SW_RESTORE);
-                    *fs = false;
-                } else {
-                    let _ = ShowWindow(h.to_hwnd(), SW_MAXIMIZE);
-                    *fs = true;
-                }
+            if *fs {
+                crate::window::restore_window(h.to_hwnd());
+                *fs = false;
+            } else {
+                crate::window::maximize_window(h.to_hwnd());
+                *fs = true;
             }
         }
     });
@@ -204,10 +197,8 @@ pub fn register(
     let hwnd_min = hwnd_holder.clone();
     window.on_minimize_clicked(move || {
         if let Some(h) = *hwnd_min.lock().unwrap() {
-            unsafe {
-                WAS_MINIMIZED.store(true, Ordering::SeqCst);
-                let _ = ShowWindow(h.to_hwnd(), SW_MINIMIZE);
-            }
+            WAS_MINIMIZED.store(true, Ordering::SeqCst);
+            crate::window::minimize_window(h.to_hwnd());
         }
     });
 
@@ -215,21 +206,18 @@ pub fn register(
     let ui_close = ui_weak.clone();
     window.on_close_clicked(move || {
         if let Some(h) = *hwnd_close.lock().unwrap() {
-            unsafe {
-                let hwnd = h.to_hwnd();
-                if let Some(ui) = ui_close.upgrade() {
-                    let is_exp = ui.get_is_expanded();
-                    ipc::send_action_to_host("record_window_mode", serde_json::json!({ "is_expanded": is_exp }));
-                    if is_exp {
-                        let mut rect = RECT::default();
-                        if GetWindowRect(hwnd, &mut rect).is_ok() {
-                            *SAVED_FULL_POS.lock().unwrap() = Some((rect.left, rect.top));
-                            ipc::send_action_to_host("save_full_window_pos", serde_json::json!({ "x": rect.left, "y": rect.top }));
-                        }
+            let hwnd = h.to_hwnd();
+            if let Some(ui) = ui_close.upgrade() {
+                let is_exp = ui.get_is_expanded();
+                ipc::send_action_to_host("record_window_mode", serde_json::json!({ "is_expanded": is_exp }));
+                if is_exp {
+                    if let Some((x, y)) = crate::window::window_position(hwnd) {
+                        *SAVED_FULL_POS.lock().unwrap() = Some((x, y));
+                        ipc::send_action_to_host("save_full_window_pos", serde_json::json!({ "x": x, "y": y }));
                     }
                 }
-                let _ = ShowWindow(hwnd, SW_HIDE);
             }
+            crate::window::hide_window(hwnd);
         }
         std::thread::sleep(std::time::Duration::from_millis(50));
         std::process::exit(0);

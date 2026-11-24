@@ -6,300 +6,54 @@ pub use crate::hal::vault::ec::*;
 pub use crate::hal::vault::mask::*;
 
 
-#[link(name = "kernel32")]
-extern "system" {
-    fn GetLastError() -> u32;
-
-    fn CreateFileA(
-        lpFileName: *const u8,
-        dwDesiredAccess: u32,
-        dwShareMode: u32,
-        lpSecurityAttributes: *mut std::ffi::c_void,
-        dwCreationDisposition: u32,
-        dwFlagsAndAttributes: u32,
-        hTemplateFile: *mut std::ffi::c_void,
-    ) -> isize;
-
-    fn CloseHandle(hObject: *mut std::ffi::c_void) -> i32;
-
-    fn DeviceIoControl(
-        hDevice: isize,
-        dwIoControlCode: u32,
-        lpInBuffer: *const std::ffi::c_void,
-        nInBufferSize: u32,
-        lpOutBuffer: *mut std::ffi::c_void,
-        nOutBufferSize: u32,
-        lpBytesReturned: *mut u32,
-        lpOverlapped: *mut std::ffi::c_void,
-    ) -> i32;
-}
-
-const IOCTL_ECREAD: u32 = crate::hal::vault::driver::IOCTL_ECREAD;
-const IOCTL_ECWRITE: u32 = crate::hal::vault::driver::IOCTL_ECWRITE;
-const GENERIC_READ_WRITE: u32 = 0xC0000000;
-const FILE_SHARE_READ_WRITE: u32 = 3;
-const OPEN_EXISTING: u32 = 3;
-
-/// Direct Win32 IOCTL call to \\.\ACPIDriver for single EC register read
-use std::sync::atomic::{AtomicBool, Ordering};
-
-static DRIVER_PROBED: AtomicBool = AtomicBool::new(false);
-static DRIVER_AVAILABLE: AtomicBool = AtomicBool::new(false);
-
-/// Probes whether \\.\ACPIDriver can be opened right now (< 0.1ms).
+/// Probes whether the EC transport can be opened right now.
+/// Windows: the ACPIDriver device. Linux: the `ec_sys` debugfs node.
 pub fn probe_acpi_driver_available() -> bool {
-    unsafe {
-        let name = crate::hal::vault::driver::get_driver_path_null_terminated();
-        let h = CreateFileA(
-            name.as_ptr(),
-            GENERIC_READ_WRITE,
-            FILE_SHARE_READ_WRITE,
-            std::ptr::null_mut(),
-            OPEN_EXISTING,
-            0,
-            std::ptr::null_mut(),
-        );
-        let ok = h != -1 && h != 0;
-        if ok {
-            CloseHandle(h as *mut _);
-        }
-        DRIVER_AVAILABLE.store(ok, Ordering::Release);
-        DRIVER_PROBED.store(true, Ordering::Release);
-        ok
-    }
+    crate::pal::ec::available()
 }
 
-/// Returns whether the ACPI kernel driver device is available.
-/// Uses fast cached atomic flag after initial probe.
+/// Returns whether an EC transport is usable right now.
 pub fn is_acpi_driver_available() -> bool {
-    if !DRIVER_PROBED.load(Ordering::Acquire) {
-        probe_acpi_driver_available()
-    } else {
-        DRIVER_AVAILABLE.load(Ordering::Acquire)
-    }
+    crate::pal::ec::available()
 }
 
-/// Explicitly re-check the driver device availability (e.g. after PnP driver installation).
+/// Explicitly re-check the driver device availability (e.g. after module load).
 pub fn mark_driver_rechecked() -> bool {
-    probe_acpi_driver_available()
+    crate::pal::ec::available()
 }
 
-/// Direct Win32 IOCTL call to \\.\ACPIDriver for single EC register read (with AcpiTest_MULong WMI fallback)
+/// Single EC register read through the platform transport
+/// (ACPIDriver -> MULong mailbox on Windows, ec_sys on Linux).
 pub fn raw_driver_read_ec(addr: u16) -> Option<u8> {
-    if is_acpi_driver_available() {
-        unsafe {
-            let name = crate::hal::vault::driver::get_driver_path_null_terminated();
-            let h = CreateFileA(
-                name.as_ptr(),
-                GENERIC_READ_WRITE,
-                FILE_SHARE_READ_WRITE,
-                std::ptr::null_mut(),
-                OPEN_EXISTING,
-                0,
-                std::ptr::null_mut(),
-            );
-            if h == -1 || h == 0 {
-                let err = GetLastError();
-                crate::log_debug!("EC_DRIVER", "raw_driver_read_ec({}) ACPIDriver device open failed: GetLastError={}", addr, err);
-            } else {
-                let in_buf: [u32; 1] = [addr as u32];
-                let mut out_buf: u32 = 0;
-                let mut ret_bytes: u32 = 0;
-                let ok = DeviceIoControl(
-                    h,
-                    IOCTL_ECREAD,
-                    in_buf.as_ptr() as *const _,
-                    4,
-                    &mut out_buf as *mut u32 as *mut _,
-                    4,
-                    &mut ret_bytes,
-                    std::ptr::null_mut(),
-                );
-                let err = GetLastError();
-                CloseHandle(h as *mut _);
-
-                if ok != 0 {
-                    let val = (out_buf & 0xFF) as u8;
-                    crate::log_debug!("EC_DRIVER", "raw_driver_read_ec({}) SUCCESS -> {} via ACPIDriver", addr, val);
-                    return Some(val);
-                } else {
-                    crate::log_debug!("EC_DRIVER", "raw_driver_read_ec({}) IOCTL failed: GetLastError={}", addr, err);
-                }
-            }
-        }
-    }
-
-    // Fallback: Driverless native WMI mailbox (AcpiTest_MULong) for legacy Tongfang/Hasee
-    if crate::driver::wmi_mulong::is_mulong_available() {
-        if let Some(val) = crate::driver::wmi_mulong::mulong_read_ec(addr) {
-            crate::log_debug!("EC_DRIVER", "raw_driver_read_ec({}) SUCCESS -> {} via AcpiTest_MULong", addr, val);
-            return Some(val);
-        }
-    }
-
-    None
+    let val = crate::pal::ec::read(addr);
+    crate::log_debug!("EC_DRIVER", "raw_driver_read_ec({}) -> {:?} via {}", addr, val, crate::pal::tag());
+    val
 }
 
-/// Direct Win32 IOCTL call to \\.\ACPIDriver for single EC register write (with AcpiTest_MULong WMI fallback)
+/// Single EC register write through the platform transport.
 pub fn raw_driver_write_ec(addr: u16, val: u8) -> bool {
-    if is_acpi_driver_available() {
-        unsafe {
-            let name = crate::hal::vault::driver::get_driver_path_null_terminated();
-            let h = CreateFileA(
-                name.as_ptr(),
-                GENERIC_READ_WRITE,
-                FILE_SHARE_READ_WRITE,
-                std::ptr::null_mut(),
-                OPEN_EXISTING,
-                0,
-                std::ptr::null_mut(),
-            );
-            if h == -1 || h == 0 {
-                let err = GetLastError();
-                crate::log_error!("EC_DRIVER", "raw_driver_write_ec(addr={}, val={}) CreateFileA failed: h={}, GetLastError={}", addr, val, h, err);
-            } else {
-                let in_buf: [u32; 2] = [addr as u32, val as u32];
-                let mut out_buf: u32 = 0;
-                let mut ret_bytes: u32 = 0;
-                let ok = DeviceIoControl(
-                    h,
-                    IOCTL_ECWRITE,
-                    in_buf.as_ptr() as *const _,
-                    8,
-                    &mut out_buf as *mut u32 as *mut _,
-                    4,
-                    &mut ret_bytes,
-                    std::ptr::null_mut(),
-                );
-                let err = GetLastError();
-                CloseHandle(h as *mut _);
-
-                if ok != 0 {
-                    crate::log_debug!("EC_DRIVER", "raw_driver_write_ec(addr={}, val={}) SUCCESS via ACPIDriver", addr, val);
-                    return true;
-                } else {
-                    crate::log_error!("EC_DRIVER", "raw_driver_write_ec(addr={}, val={}) DeviceIoControl failed: ok={}, GetLastError={}", addr, val, ok, err);
-                }
-            }
-        }
+    let ok = crate::pal::ec::write(addr, val);
+    if !ok {
+        crate::log_error!(
+            "EC_DRIVER",
+            "raw_driver_write_ec(addr={}, val={}) failed via {}",
+            addr,
+            val,
+            crate::pal::tag()
+        );
     }
-
-    // Fallback: Driverless native WMI mailbox (AcpiTest_MULong) for legacy Tongfang/Hasee
-    if crate::driver::wmi_mulong::is_mulong_available() {
-        return crate::driver::wmi_mulong::mulong_write_ec(addr, val);
-    }
-
-    false
+    ok
 }
 
-/// Direct Win32 IOCTL batch read from \\.\ACPIDriver (with AcpiTest_MULong fallback)
+/// Batch read through the platform transport.
 pub fn raw_driver_batch_read_ec(addrs: &[u16]) -> Option<Vec<u8>> {
-    if is_acpi_driver_available() {
-        unsafe {
-            let name = crate::hal::vault::driver::get_driver_path_null_terminated();
-            let h = CreateFileA(
-                name.as_ptr(),
-                GENERIC_READ_WRITE,
-                FILE_SHARE_READ_WRITE,
-                std::ptr::null_mut(),
-                OPEN_EXISTING,
-                0,
-                std::ptr::null_mut(),
-            );
-            if h != -1 && h != 0 {
-                let mut results = Vec::with_capacity(addrs.len());
-                for &addr in addrs {
-                    let in_buf: [u32; 1] = [addr as u32];
-                    let mut out_buf: u32 = 0;
-                    let mut ret_bytes: u32 = 0;
-                    let ok = DeviceIoControl(
-                        h,
-                        IOCTL_ECREAD,
-                        in_buf.as_ptr() as *const _,
-                        4,
-                        &mut out_buf as *mut u32 as *mut _,
-                        4,
-                        &mut ret_bytes,
-                        std::ptr::null_mut(),
-                    );
-                    if ok != 0 {
-                        results.push((out_buf & 0xFF) as u8);
-                    } else {
-                        results.push(0);
-                    }
-                }
-                CloseHandle(h as *mut _);
-                return Some(results);
-            }
-        }
-    }
-
-    // Fallback: Driverless native WMI mailbox (AcpiTest_MULong)
-    if crate::driver::wmi_mulong::is_mulong_available() {
-        let mut results = Vec::with_capacity(addrs.len());
-        for &addr in addrs {
-            results.push(crate::driver::wmi_mulong::mulong_read_ec(addr).unwrap_or(0));
-        }
-        return Some(results);
-    }
-
-    None
+    crate::pal::ec::batch_read(addrs)
 }
 
-/// Direct Win32 IOCTL batch write to \\.\ACPIDriver (with AcpiTest_MULong fallback)
+/// Batch write through the platform transport.
 pub fn raw_driver_batch_write_ec(entries: &[(u16, u8)]) -> bool {
-    if is_acpi_driver_available() {
-        unsafe {
-            let name = crate::hal::vault::driver::get_driver_path_null_terminated();
-            let h = CreateFileA(
-                name.as_ptr(),
-                GENERIC_READ_WRITE,
-                FILE_SHARE_READ_WRITE,
-                std::ptr::null_mut(),
-                OPEN_EXISTING,
-                0,
-                std::ptr::null_mut(),
-            );
-            if h != -1 && h != 0 {
-                let mut all_ok = true;
-                for &(addr, val) in entries {
-                    let in_buf: [u32; 2] = [addr as u32, val as u32];
-                    let mut out_buf: u32 = 0;
-                    let mut ret_bytes: u32 = 0;
-                    let ok = DeviceIoControl(
-                        h,
-                        IOCTL_ECWRITE,
-                        in_buf.as_ptr() as *const _,
-                        8,
-                        &mut out_buf as *mut u32 as *mut _,
-                        4,
-                        &mut ret_bytes,
-                        std::ptr::null_mut(),
-                    );
-                    if ok == 0 {
-                        all_ok = false;
-                    }
-                }
-                CloseHandle(h as *mut _);
-                return all_ok;
-            }
-        }
-    }
-
-    // Fallback: Driverless native WMI mailbox (AcpiTest_MULong)
-    if crate::driver::wmi_mulong::is_mulong_available() {
-        let mut all_ok = true;
-        for &(addr, val) in entries {
-            if !crate::driver::wmi_mulong::mulong_write_ec(addr, val) {
-                all_ok = false;
-            }
-        }
-        return all_ok;
-    }
-
-    false
+    crate::pal::ec::batch_write(entries)
 }
-
 
 /// Write multiple bytes to EC RAM in a single batch.
 pub fn wmi_write_ec_batch(entries: &[(u16, u8)]) -> bool {

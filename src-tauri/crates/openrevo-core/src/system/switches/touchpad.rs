@@ -1,29 +1,34 @@
-use std::os::windows::process::CommandExt;
-use std::process::Command;
+#[cfg(windows)]
 use windows::core::w;
+#[cfg(windows)]
 use windows::Win32::Foundation::CloseHandle;
+#[cfg(windows)]
 use windows::Win32::System::Registry::{
     RegCloseKey, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
     RegNotifyChangeKeyValue, HKEY_CURRENT_USER,
     KEY_READ, KEY_SET_VALUE, KEY_NOTIFY, REG_DWORD,
     REG_NOTIFY_CHANGE_LAST_SET, HKEY,
 };
+#[cfg(windows)]
 use windows::Win32::System::Threading::{CreateEventW, WaitForSingleObject};
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Ensure touchpad is NOT left in PnP-disabled state in Windows Device Manager
+#[cfg(windows)]
 pub fn ensure_touchpad_device_enabled() {
-    let _ = Command::new("pnputil")
+    let _ = std::process::Command::new("pnputil")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["/enable-device", "/deviceid", "HID\\UNIW0001&Col02"])
         .output();
-    let _ = Command::new("pnputil")
+    let _ = std::process::Command::new("pnputil")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["/enable-device", "/deviceid", "HID\\UNIW0001&Col01"])
         .output();
 }
 
+#[cfg(windows)]
 pub fn read_ptp_registry_enabled() -> Option<bool> {
     unsafe {
         let mut hkey = HKEY::default();
@@ -50,6 +55,7 @@ pub fn read_ptp_registry_enabled() -> Option<bool> {
     None
 }
 
+#[cfg(windows)]
 pub fn write_ptp_registry_enabled(enabled: bool) {
     unsafe {
         let mut hkey = HKEY::default();
@@ -89,6 +95,7 @@ pub fn get_realtime_touchpad_state(has_ec_switches: bool, fallback: bool) -> boo
 
 /// Start kernel-level registry notification listener on PrecisionTouchPad status
 /// Automatically wakes on Fn+F5 or Windows settings toggle and broadcasts to Tauri UI
+#[cfg(windows)]
 pub fn start_touchpad_listener() {
     std::thread::spawn(move || {
         crate::log_info!("DEVICE_SWITCH", "Starting Touchpad PrecisionTouchPad registry kernel listener thread...");
@@ -170,6 +177,69 @@ pub fn start_touchpad_listener() {
                 let _ = RegCloseKey(hkey);
             }
             std::thread::sleep(std::time::Duration::from_secs(1));
+        }
+    });
+}
+
+// ---------------------------------------------------------------------------
+// Linux: the touchpad is a kernel input device; the EC bit is the only
+// user-observable on/off state, and Fn+F5 flips it in hardware. The listener
+// therefore polls that bit instead of waiting on a registry notification.
+// ---------------------------------------------------------------------------
+
+#[cfg(not(windows))]
+pub fn ensure_touchpad_device_enabled() {
+    // i2c-hid keeps the device bound; nothing to re-enable here.
+}
+
+#[cfg(not(windows))]
+pub fn read_ptp_registry_enabled() -> Option<bool> {
+    if !crate::pal::ec::available() {
+        return None;
+    }
+    let val = crate::pal::ec::read(crate::driver::wmi_ec::ADDR_BATTERY_PROTECTION_MODE)?;
+    Some((val & crate::driver::wmi_ec::TOUCHPAD_BITMASK) != 0)
+}
+
+#[cfg(not(windows))]
+pub fn write_ptp_registry_enabled(enabled: bool) {
+    crate::driver::wmi_ec::wmi_modify_ec_mask(
+        crate::driver::wmi_ec::ADDR_BATTERY_PROTECTION_MODE,
+        crate::driver::wmi_ec::TOUCHPAD_BITMASK,
+        enabled,
+    );
+}
+
+#[cfg(not(windows))]
+pub fn start_touchpad_listener() {
+    std::thread::spawn(move || {
+        crate::log_info!(
+            "DEVICE_SWITCH",
+            "Starting Touchpad EC poll listener thread (500ms cadence)"
+        );
+        let mut last_known_state = read_ptp_registry_enabled();
+        loop {
+            std::thread::sleep(std::time::Duration::from_millis(500));
+            let Some(state) = read_ptp_registry_enabled() else {
+                continue;
+            };
+            if last_known_state == Some(state) {
+                continue;
+            }
+            crate::log_info!(
+                "DEVICE_SWITCH",
+                "Touchpad state change observed on EC: {:?} -> {}",
+                last_known_state,
+                state
+            );
+            last_known_state = Some(state);
+
+            let mut cfg = crate::system::config::load_config();
+            cfg.touchpad_enabled = state;
+            crate::system::config::save_config(&cfg);
+
+            crate::event::osd_notify_global("touchpad", &state.to_string());
+            crate::event::emit_global("touchpad-state-changed", serde_json::json!(state));
         }
     });
 }

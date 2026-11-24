@@ -1,8 +1,8 @@
-use std::os::windows::process::CommandExt;
-use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+#[cfg(windows)]
 use windows::Devices::Radios::{Radio, RadioKind, RadioState};
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 pub static LAST_BT_CHECK: AtomicU64 = AtomicU64::new(0);
@@ -20,6 +20,7 @@ pub fn record_bluetooth_state(enable: bool) {
 }
 
 /// Query real-time Bluetooth radio status using native WinRT Radio API (0ms, zero PowerShell)
+#[cfg(windows)]
 pub fn get_native_bluetooth_radio_state() -> Option<bool> {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
@@ -40,6 +41,7 @@ pub fn get_native_bluetooth_radio_state() -> Option<bool> {
 }
 
 /// Set Bluetooth radio state using native WinRT Radio API (zero PowerShell)
+#[cfg(windows)]
 pub fn set_native_bluetooth_radio_state(enable: bool) -> bool {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
@@ -86,6 +88,7 @@ pub fn get_realtime_bluetooth_state() -> Option<bool> {
 }
 
 /// Query real-time Wi-Fi radio status using native WinRT Radio API (0ms, zero PowerShell)
+#[cfg(windows)]
 pub fn get_wifi_radio_state_native() -> Option<bool> {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
@@ -106,6 +109,7 @@ pub fn get_wifi_radio_state_native() -> Option<bool> {
 }
 
 /// Set Wi-Fi radio state using native WinRT Radio API (fast RF toggle, ~10ms)
+#[cfg(windows)]
 pub fn set_wifi_radio_state_native(enable: bool) -> bool {
     unsafe {
         let _ = windows::Win32::System::Com::CoInitializeEx(None, windows::Win32::System::Com::COINIT_MULTITHREADED);
@@ -131,6 +135,7 @@ pub fn set_wifi_radio_state_native(enable: bool) -> bool {
 }
 
 /// Read real-time Wi-Fi status (WinRT Radio first, fallback to netsh)
+#[cfg(windows)]
 pub fn get_realtime_wifi_state() -> Option<bool> {
     // 1. Try WinRT Radio API first (instantaneous, 0ms)
     if let Some(state) = get_wifi_radio_state_native() {
@@ -138,7 +143,7 @@ pub fn get_realtime_wifi_state() -> Option<bool> {
     }
 
     // 2. Fallback: netsh interface show interface (~10ms)
-    let output = Command::new("netsh")
+    let output = std::process::Command::new("netsh")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["interface", "show", "interface"])
         .output()
@@ -163,12 +168,13 @@ pub fn get_realtime_wifi_state() -> Option<bool> {
 }
 
 /// Auto-detect Wi-Fi/WLAN adapter name dynamically via netsh (5ms, zero PowerShell)
+#[cfg(windows)]
 pub fn get_or_detect_wifi_adapter(cfg: &mut crate::system::config::AppConfig) -> String {
     if !cfg.wifi_adapter_name.is_empty() {
         return cfg.wifi_adapter_name.clone();
     }
 
-    if let Ok(output) = Command::new("netsh")
+    if let Ok(output) = std::process::Command::new("netsh")
         .creation_flags(CREATE_NO_WINDOW)
         .args(["wlan", "show", "interfaces"])
         .output()
@@ -193,4 +199,94 @@ pub fn get_or_detect_wifi_adapter(cfg: &mut crate::system::config::AppConfig) ->
     }
 
     "WLAN".to_string()
+}
+
+// ---------------------------------------------------------------------------
+// Linux: rfkill switches under /sys/class/rfkill. `soft` is the userspace block
+// (what a radio toggle writes), `hard` the physical kill switch.
+// ---------------------------------------------------------------------------
+
+#[cfg(not(windows))]
+fn rfkill_state(kind: &str) -> Option<bool> {
+    for entry in std::fs::read_dir("/sys/class/rfkill").ok()?.flatten() {
+        let path = entry.path();
+        let ty = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+        if ty.trim() != kind {
+            continue;
+        }
+        let soft = std::fs::read_to_string(path.join("soft")).unwrap_or_default();
+        let hard = std::fs::read_to_string(path.join("hard")).unwrap_or_default();
+        return Some(soft.trim() == "0" && hard.trim() == "0");
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn rfkill_set(kind: &str, enable: bool) -> bool {
+    let mut found = false;
+    let Ok(entries) = std::fs::read_dir("/sys/class/rfkill") else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let ty = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+        if ty.trim() != kind {
+            continue;
+        }
+        let flag = if enable { "0" } else { "1" };
+        if std::fs::write(path.join("soft"), flag).is_ok() {
+            found = true;
+        } else {
+            crate::log_warn!(
+                "DEVICE_SWITCH",
+                "rfkill write to {} failed (needs CAP_NET_ADMIN)",
+                path.display()
+            );
+        }
+    }
+    found
+}
+
+#[cfg(not(windows))]
+pub fn get_native_bluetooth_radio_state() -> Option<bool> {
+    rfkill_state("bluetooth")
+}
+
+#[cfg(not(windows))]
+pub fn set_native_bluetooth_radio_state(enable: bool) -> bool {
+    rfkill_set("bluetooth", enable)
+}
+
+#[cfg(not(windows))]
+pub fn get_wifi_radio_state_native() -> Option<bool> {
+    rfkill_state("wlan")
+}
+
+#[cfg(not(windows))]
+pub fn set_wifi_radio_state_native(enable: bool) -> bool {
+    rfkill_set("wlan", enable)
+}
+
+#[cfg(not(windows))]
+pub fn get_realtime_wifi_state() -> Option<bool> {
+    get_wifi_radio_state_native()
+}
+
+/// Linux has no adapter naming step; the kernel interface name is the identity.
+#[cfg(not(windows))]
+pub fn get_or_detect_wifi_adapter(cfg: &mut crate::system::config::AppConfig) -> String {
+    if !cfg.wifi_adapter_name.is_empty() {
+        return cfg.wifi_adapter_name.clone();
+    }
+    if let Ok(entries) = std::fs::read_dir("/sys/class/net") {
+        for entry in entries.flatten() {
+            if entry.path().join("wireless").exists() {
+                let name = entry.file_name().to_string_lossy().into_owned();
+                cfg.wifi_adapter_name = name.clone();
+                crate::system::config::save_config(cfg);
+                return name;
+            }
+        }
+    }
+    "wlan0".to_string()
 }

@@ -54,18 +54,24 @@ pub const GUID_TURBO_PERF: GUID = GUID {
     data4: [0x87, 0x37, 0x46, 0x34, 0x5c, 0x09, 0xc2, 0x38],
 };
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     fn LoadLibraryA(lp_lib_filename: *const u8) -> *mut std::ffi::c_void;
     fn GetProcAddress(h_module: *mut std::ffi::c_void, lp_proc_name: *const u8) -> *mut std::ffi::c_void;
 }
 
+#[cfg(windows)]
 use windows::core::s;
+#[cfg(windows)]
 use windows::Win32::Foundation::{FreeLibrary, HANDLE};
+#[cfg(windows)]
 use windows::Win32::System::LibraryLoader::{GetProcAddress as get_overlay_entry, LoadLibraryExA, LOAD_LIBRARY_SEARCH_SYSTEM32};
 
+#[cfg(windows)]
 type FnPowerSetActiveOverlayScheme = unsafe extern "system" fn(*const GUID) -> u32;
 
+#[cfg(windows)]
 fn set_active_overlay_scheme(guid_ptr: *const GUID) -> Result<(), String> {
     unsafe {
         let library = LoadLibraryExA(s!("powrprof.dll"), HANDLE::default(), LOAD_LIBRARY_SEARCH_SYSTEM32)
@@ -84,6 +90,7 @@ fn set_active_overlay_scheme(guid_ptr: *const GUID) -> Result<(), String> {
     }
 }
 
+#[cfg(windows)]
 #[repr(C)]
 #[derive(Copy, Clone, Debug, Default)]
 pub struct ProcessorPowerInformation {
@@ -95,6 +102,7 @@ pub struct ProcessorPowerInformation {
     pub current_idle_state: u32,
 }
 
+#[cfg(windows)]
 type FnCallNtPowerInformation = unsafe extern "system" fn(
     information_level: u32,
     input_buffer: *const std::ffi::c_void,
@@ -105,6 +113,7 @@ type FnCallNtPowerInformation = unsafe extern "system" fn(
 
 /// Query live CPU frequency and limits across cores (zero overhead, in-memory kernel query).
 /// Returns (current_mhz, max_mhz, mhz_limit) for core 0.
+#[cfg(windows)]
 pub fn get_cpu_frequency_info() -> Option<(u32, u32, u32)> {
     unsafe {
         let dll_name = b"powrprof.dll\0";
@@ -128,6 +137,25 @@ pub fn get_cpu_frequency_info() -> Option<(u32, u32, u32)> {
             None
         }
     }
+}
+
+/// Linux: cpufreq sysfs reports kHz; the same tuple shape is kept so the UI does
+/// not care which platform produced it.
+#[cfg(not(windows))]
+pub fn get_cpu_frequency_info() -> Option<(u32, u32, u32)> {
+    let base = std::path::Path::new("/sys/devices/system/cpu/cpu0/cpufreq");
+    let read = |name: &str| -> Option<u32> {
+        std::fs::read_to_string(base.join(name))
+            .ok()?
+            .trim()
+            .parse::<u64>()
+            .ok()
+            .map(|khz| (khz / 1000) as u32)
+    };
+    let current = read("scaling_cur_freq")?;
+    let max = read("cpuinfo_max_freq").or_else(|| read("scaling_max_freq"))?;
+    let limit = read("scaling_max_freq").unwrap_or(max);
+    Some((current, max, limit))
 }
 
 static POWER_MODE_LOCK: std::sync::Mutex<Option<(u8, std::time::Instant)>> = std::sync::Mutex::new(None);
@@ -547,6 +575,30 @@ mod tests {
 }
 
 
+/// Linux: power-profiles-daemon is the cross-desktop switch (UPower front-end is
+/// `powerprofilesctl`). Windows' overlay GUIDs have no equivalent here.
+#[cfg(not(windows))]
+pub fn set_windows_power_overlay(ui_mode: u8) -> Result<(), String> {
+    let profile = match ui_mode {
+        1 => "power-saver",
+        3 => "performance",
+        _ => "balanced",
+    };
+    let out = crate::pal::process::command("powerprofilesctl")
+        .args(["set", profile])
+        .output()
+        .map_err(|e| format!("powerprofilesctl: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "powerprofilesctl set {profile} failed: {}",
+            String::from_utf8_lossy(&out.stderr).trim()
+        ));
+    }
+    crate::log_info!("POWER_MODE", "power-profiles-daemon set to {} (ui mode {})", profile, ui_mode);
+    Ok(())
+}
+
+#[cfg(windows)]
 pub fn set_windows_power_overlay(ui_mode: u8) -> Result<(), String> {
     if !(1..=4).contains(&ui_mode) {
         return Err("Invalid Windows power mode".into());

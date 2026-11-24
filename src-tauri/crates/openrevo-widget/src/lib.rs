@@ -26,6 +26,15 @@ static IS_CLICK_THROUGH_LOCKED: AtomicBool = AtomicBool::new(false);
 static CTRL_PREVIEW_TEMP_UNLOCKED: AtomicBool = AtomicBool::new(false);
 static RECORDED_HWND: Mutex<Option<isize>> = Mutex::new(None);
 
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug, Clone, Copy)]
+pub struct WidgetHandle(pub isize);
+
+#[cfg(not(target_os = "windows"))]
+pub fn find_thread_hwnd() -> Option<WidgetHandle> {
+    Some(WidgetHandle(0))
+}
+
 pub fn get_latest_telemetry() -> &'static Mutex<Option<serde_json::Value>> {
     LATEST_TELEMETRY.get_or_init(|| Mutex::new(None))
 }

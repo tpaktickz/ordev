@@ -1,6 +1,11 @@
+#![allow(unused_imports)]
+#[cfg(windows)]
 use std::os::windows::process::CommandExt;
+#[cfg(windows)]
 use std::process::Command;
+#[cfg(windows)]
 use windows::core::w;
+#[cfg(windows)]
 use windows::Win32::System::Registry::{
     RegCloseKey, RegCreateKeyExW, RegOpenKeyExW, RegQueryValueExW, RegSetValueExW,
     HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE,
@@ -8,9 +13,11 @@ use windows::Win32::System::Registry::{
     HKEY, REG_OPTION_NON_VOLATILE,
 };
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Read Windows Camera Group Policy (HKLM\SOFTWARE\Policies\Microsoft\Camera\AllowCamera)
+#[cfg(windows)]
 pub fn read_camera_policy_registry() -> Option<bool> {
     unsafe {
         let mut hkey = HKEY::default();
@@ -38,6 +45,7 @@ pub fn read_camera_policy_registry() -> Option<bool> {
 }
 
 /// Write Windows Camera Group Policy (HKLM\SOFTWARE\Policies\Microsoft\Camera\AllowCamera)
+#[cfg(windows)]
 pub fn write_camera_policy_registry(enable: bool) {
     unsafe {
         let mut hkey = HKEY::default();
@@ -68,6 +76,7 @@ pub fn write_camera_policy_registry(enable: bool) {
 }
 
 /// Check camera hardware device status via Windows PnP utility (~10ms)
+#[cfg(windows)]
 pub fn get_camera_pnp_status() -> Option<bool> {
     let output = Command::new("pnputil")
         .creation_flags(CREATE_NO_WINDOW)
@@ -96,6 +105,7 @@ pub fn get_camera_pnp_status() -> Option<bool> {
 }
 
 /// Read Windows Camera Privacy access state (HKCU / HKLM ConsentStore\webcam)
+#[cfg(windows)]
 pub fn read_camera_consent_registry() -> Option<bool> {
     unsafe {
         let mut hkey = HKEY::default();
@@ -124,6 +134,7 @@ pub fn read_camera_consent_registry() -> Option<bool> {
 }
 
 /// Write Windows Camera Privacy access state (HKCU and HKLM ConsentStore\webcam, including NonPackaged desktop apps)
+#[cfg(windows)]
 pub fn write_camera_consent_registry(enable: bool) {
     let str_val: &[u16] = if enable {
         &[b'A' as u16, b'l' as u16, b'l' as u16, b'o' as u16, b'w' as u16, 0]
@@ -221,4 +232,56 @@ pub fn get_realtime_camera_state(has_ec_switches: bool, fallback: bool) -> bool 
     }
 
     fallback
+}
+
+// ---------------------------------------------------------------------------
+// Linux
+// ---------------------------------------------------------------------------
+
+/// A camera is "started" when the kernel bound a video4linux node to it.
+#[cfg(not(windows))]
+pub fn get_camera_pnp_status() -> Option<bool> {
+    let dir = std::path::Path::new("/sys/class/video4linux");
+    let entries = std::fs::read_dir(dir).ok()?;
+    let mut found = false;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        if !name.starts_with("video") {
+            continue;
+        }
+        // Metadata-only nodes (codec/ISP) are not capture devices.
+        let props = std::fs::read_to_string(entry.path().join("index")).unwrap_or_default();
+        if props.trim() == "0" || props.trim().is_empty() {
+            found = true;
+        }
+    }
+    Some(found)
+}
+
+/// There is no Camera group policy on Linux; the privacy layer is per-app
+/// (PipeWire portal) and is not observable from here.
+#[cfg(not(windows))]
+pub fn read_camera_policy_registry() -> Option<bool> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn write_camera_policy_registry(_enable: bool) {
+    crate::log_info!(
+        "CAMERA",
+        "Camera policy is per-application via xdg-desktop-portal; nothing to write"
+    );
+}
+
+#[cfg(not(windows))]
+pub fn read_camera_consent_registry() -> Option<bool> {
+    None
+}
+
+#[cfg(not(windows))]
+pub fn write_camera_consent_registry(_enable: bool) {
+    crate::log_info!(
+        "CAMERA",
+        "Camera consent is granted by the portal per application; nothing to write"
+    );
 }

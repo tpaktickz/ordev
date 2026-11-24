@@ -5,70 +5,24 @@
 // Fully aligns with Windows 11 "Settings > System > Display > Color Management".
 
 use serde::{Deserialize, Serialize};
-use std::ffi::OsStr;
 use std::fs;
-use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
-use windows::Win32::Graphics::Gdi::HDC;
 
-#[repr(C)]
-pub struct GammaRamp {
-    pub red: [u16; 256],
-    pub green: [u16; 256],
-    pub blue: [u16; 256],
-}
+use crate::pal::display_color as dc;
 
-#[link(name = "gdi32")]
-extern "system" {
-    fn CreateDCW(
-        pwsz_driver: *const u16,
-        pwsz_device: *const u16,
-        pwsz_port: *const u16,
-        p_data: *const std::ffi::c_void,
-    ) -> HDC;
-    fn DeleteDC(hdc: HDC) -> windows::Win32::Foundation::BOOL;
-    fn SetDeviceGammaRamp(hdc: HDC, lp_ramp: *const std::ffi::c_void) -> windows::Win32::Foundation::BOOL;
-    fn GetICMProfileW(hdc: HDC, p_buf_size: *mut u32, psz_filename: *mut u16) -> windows::Win32::Foundation::BOOL;
-    fn SetICMProfileW(hdc: HDC, psz_filename: *const u16) -> windows::Win32::Foundation::BOOL;
-}
-
-#[repr(C)]
-struct DISPLAY_DEVICEW {
-    cb: u32,
-    device_name: [u16; 32],
-    device_string: [u16; 128],
-    state_flags: u32,
-    device_id: [u16; 128],
-    device_key: [u16; 128],
-}
-
-#[link(name = "user32")]
-extern "system" {
-    fn EnumDisplayDevicesW(
-        lp_device: *const u16,
-        i_dev_num: u32,
-        lp_display_device: *mut DISPLAY_DEVICEW,
-        dw_flags: u32,
-    ) -> windows::Win32::Foundation::BOOL;
-}
-
-#[allow(dead_code)]
-#[link(name = "mscms")]
-extern "system" {
-    fn InstallColorProfileW(p_machine_name: *const u16, p_profile_name: *const u16) -> i32;
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
-pub struct ColorProfileItem {
-    pub id: String,                 // Unique identifier
-    pub name: String,               // Human-readable display name
-    pub file_name: String,          // File name in spool/drivers/color or user icc dir
-    pub is_builtin: bool,           // System/Factory vs User custom
-    pub description: String,        // Short description
-}
+pub use crate::pal::display_color::GammaRamp;
 
 fn default_selected_id() -> String {
     "std_srgb".to_string()
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ColorProfileItem {
+    pub id: String,
+    pub name: String,
+    pub file_name: String,
+    pub is_builtin: bool,
+    pub description: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -114,8 +68,16 @@ const EMBEDDED_SRGB: &[u8] = include_bytes!("../../../../resources/profiles/sRGB
 const EMBEDDED_DCIP3: &[u8] = include_bytes!("../../../../resources/profiles/DCIP3.icm");
 const EMBEDDED_ADOBE_RGB: &[u8] = include_bytes!("../../../../resources/profiles/AdobeRGB.icm");
 
-fn to_wide(s: &str) -> Vec<u16> {
-    OsStr::new(s).encode_wide().chain(std::iter::once(0)).collect()
+/// Directories searched for a profile file, most specific first.
+fn profile_search_dirs() -> Vec<PathBuf> {
+    let mut dirs = vec![get_user_icc_dir(), dc::profiles_dir()];
+    #[cfg(windows)]
+    dirs.push(PathBuf::from(r"C:\Windows\System32\spool\drivers\color"));
+    #[cfg(target_os = "linux")]
+    for base in crate::pal::xdg::data_dirs() {
+        dirs.push(base.join("color").join("icc"));
+    }
+    dirs
 }
 
 pub fn get_user_icc_dir() -> PathBuf {
@@ -163,18 +125,10 @@ pub fn identity_ramp() -> GammaRamp {
     ramp
 }
 
-/// Apply a hardware gamma ramp targeting a specific display device via its GDI DC
+/// Apply a hardware gamma ramp to one display (GDI DC on Windows, DRM `gamma`
+/// on Linux, where it needs a DRM master — i.e. a bare TTY or a helper).
 pub fn apply_hardware_ramp_for_device(device_name: &str, ramp: &GammaRamp) -> bool {
-    let wide_name = to_wide(device_name);
-    unsafe {
-        let hdc = CreateDCW(std::ptr::null(), wide_name.as_ptr(), std::ptr::null(), std::ptr::null());
-        if !hdc.0.is_null() {
-            let res = SetDeviceGammaRamp(hdc, ramp as *const _ as *const _);
-            let _ = DeleteDC(hdc);
-            return res.as_bool();
-        }
-    }
-    false
+    dc::apply_ramp(device_name, ramp)
 }
 
 /// Parse VCGT (Video Card Gamma Table) tag from an ICC/ICM profile
@@ -325,15 +279,16 @@ pub fn load_profile_bytes_by_name(file_name: &str) -> Option<Vec<u8>> {
     if file_name.is_empty() {
         return None;
     }
-    let sys_spool_dir = PathBuf::from(r"C:\Windows\System32\spool\drivers\color");
-    let spool_path = sys_spool_dir.join(file_name);
-    let user_path = get_user_icc_dir().join(file_name);
+    for dir in profile_search_dirs() {
+        let path = dir.join(file_name);
+        if path.is_file() {
+            if let Ok(bytes) = fs::read(&path) {
+                return Some(bytes);
+            }
+        }
+    }
 
-    if spool_path.exists() {
-        fs::read(&spool_path).ok()
-    } else if user_path.exists() {
-        fs::read(&user_path).ok()
-    } else if file_name.eq_ignore_ascii_case("sRGB.icm") {
+    if file_name.eq_ignore_ascii_case("sRGB.icm") {
         Some(EMBEDDED_SRGB.to_vec())
     } else if file_name.eq_ignore_ascii_case("DCIP3.icm") {
         Some(EMBEDDED_DCIP3.to_vec())
@@ -378,440 +333,68 @@ pub fn ensure_standard_profiles_deployed() {
         }
     }
 
-    let sys_spool = PathBuf::from(r"C:\Windows\System32\spool\drivers\color");
-    if sys_spool.exists() {
-        for (name, path) in [("sRGB.icm", &srgb_path), ("DCIP3.icm", &p3_path), ("AdobeRGB.icm", &adobe_path)] {
-            let sys_file = sys_spool.join(name);
-            if !sys_file.exists() || sys_file.metadata().map(|m| m.len()).unwrap_or(0) != path.metadata().map(|m| m.len()).unwrap_or(0) {
-                let _ = fs::copy(path, &sys_file);
-                unsafe {
-                    let p = to_wide(&sys_file.to_string_lossy());
-                    let _ = InstallColorProfileW(std::ptr::null(), p.as_ptr());
-                }
-            }
-        }
+    for path in [&srgb_path, &p3_path, &adobe_path] {
+        let _ = dc::install_profile(path);
     }
 }
 
-/// Query the currently active ICM profile from Windows GDI for a specific display device
+/// Query the OS-side active profile for a display, as a bare file name.
 pub fn get_windows_active_icm_profile_for_device(device_name: &str) -> Option<String> {
-    let wide_name = to_wide(device_name);
-    unsafe {
-        let hdc = CreateDCW(std::ptr::null(), wide_name.as_ptr(), std::ptr::null(), std::ptr::null());
-        if !hdc.0.is_null() {
-            let mut buf = [0u16; 512];
-            let mut size = 512u32;
-            let ok = GetICMProfileW(hdc, &mut size, buf.as_mut_ptr());
-            let _ = DeleteDC(hdc);
-            if ok.as_bool() && size > 1 {
-                let full_path = String::from_utf16_lossy(&buf[..(size as usize).saturating_sub(1)]);
-                let fname = Path::new(&full_path)
-                    .file_name()
-                    .and_then(|f| f.to_str())
-                    .unwrap_or("")
-                    .to_string();
-                if !fname.is_empty() {
-                    return Some(fname);
-                }
-            }
-        }
-    }
-    None
+    dc::active_profile(device_name)
 }
 
-/// Encode a list of strings into a UTF-16 double-null-terminated REG_MULTI_SZ buffer
-fn encode_multi_sz(strings: &[&str]) -> Vec<u16> {
-    let mut out = Vec::new();
-    for s in strings {
-        out.extend(OsStr::new(s).encode_wide());
-        out.push(0);
-    }
-    out.push(0);
-    out
-}
-
-/// Resolve all monitor class subkey indices (e.g. ["0002", "0007", "0008"]) strictly belonging to the specified display device
+/// Monitor class indices belonging to a display (Windows concept; empty on Linux).
 pub fn get_monitor_class_subkeys_for_device(device_name: &str) -> Vec<String> {
-    let wide_name = to_wide(device_name);
-    let mut subs = Vec::new();
-    unsafe {
-        for mon_idx in 0..8 {
-            let mut dd_mon = DISPLAY_DEVICEW {
-                cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
-                device_name: [0; 32],
-                device_string: [0; 128],
-                state_flags: 0,
-                device_id: [0; 128],
-                device_key: [0; 128],
-            };
-            if !EnumDisplayDevicesW(wide_name.as_ptr(), mon_idx, &mut dd_mon, 0).as_bool() {
-                break;
-            }
-            let key_str = String::from_utf16_lossy(&dd_mon.device_key);
-            let trimmed = key_str.trim_matches('\0');
-            if let Some(sub) = trimmed.split('\\').last() {
-                if !sub.is_empty() && sub.chars().all(|c| c.is_ascii_digit()) && !subs.contains(&sub.to_string()) {
-                    subs.push(sub.to_string());
-                }
-            }
-        }
-    }
-    subs
+    dc::class_indices(device_name)
 }
 
-/// Resolve the active primary monitor class subkey index (e.g. "0008") for a display device from GDI
+/// Attached monitor class index for a display, if any.
 pub fn get_monitor_class_subkey_for_device(device_name: &str) -> Option<String> {
-    let wide_name = to_wide(device_name);
-    let mut fallback_sub: Option<String> = None;
-    unsafe {
-        for mon_idx in 0..8 {
-            let mut dd_mon = DISPLAY_DEVICEW {
-                cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
-                device_name: [0; 32],
-                device_string: [0; 128],
-                state_flags: 0,
-                device_id: [0; 128],
-                device_key: [0; 128],
-            };
-            if !EnumDisplayDevicesW(wide_name.as_ptr(), mon_idx, &mut dd_mon, 0).as_bool() {
-                break;
-            }
-            let key_str = String::from_utf16_lossy(&dd_mon.device_key);
-            let trimmed = key_str.trim_matches('\0');
-            if let Some(sub) = trimmed.split('\\').last() {
-                if !sub.is_empty() && sub.chars().all(|c| c.is_ascii_digit()) {
-                    let is_attached = (dd_mon.state_flags & 0x00000001) != 0; // DISPLAY_DEVICE_ATTACHED_TO_DESKTOP
-                    if is_attached {
-                        return Some(sub.to_string());
-                    }
-                    if fallback_sub.is_none() {
-                        fallback_sub = Some(sub.to_string());
-                    }
-                }
-            }
-        }
-    }
-    fallback_sub
+    dc::active_devices()
+        .into_iter()
+        .find(|d| d.name == device_name && d.attached)
+        .and_then(|d| d.class_index)
+        .or_else(|| dc::class_indices(device_name).into_iter().next())
 }
 
-/// Query active ICM profile from HKCU registry ProfileAssociations for a device
+/// Active profile as recorded by the OS color stack.
 pub fn get_registry_active_icm_for_device(device_name: &str) -> Option<String> {
-    let subkey = get_monitor_class_subkey_for_device(device_name)?;
-    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RegOpenKeyExW, RegQueryValueExW, KEY_READ};
-
-    let base_path_w = to_wide(&format!(
-        r"Software\Microsoft\Windows NT\CurrentVersion\ICM\ProfileAssociations\Display\{{4d36e96e-e325-11ce-bfc1-08002be10318}}\{}",
-        subkey
-    ));
-
-    unsafe {
-        let mut hsub = windows::Win32::System::Registry::HKEY::default();
-        if RegOpenKeyExW(HKEY_CURRENT_USER, windows::core::PCWSTR(base_path_w.as_ptr()), 0, KEY_READ, &mut hsub).is_ok() {
-            let snap_w = to_wide("ICMProfileSnapshot");
-            let mut buf = [0u16; 512];
-            let mut size = 1024u32;
-            if RegQueryValueExW(hsub, windows::core::PCWSTR(snap_w.as_ptr()), None, None, Some(buf.as_mut_ptr() as *mut u8), Some(&mut size)).is_ok() && size > 2 {
-                let name = String::from_utf16_lossy(&buf[..(size as usize / 2)]).trim_matches('\0').to_string();
-                let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-                if !name.is_empty() {
-                    return Some(name);
-                }
-            }
-            let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-        }
-    }
-
-    None
+    dc::active_profile(device_name)
 }
 
-/// Synchronize active color profile to Windows Color System (GDI DC + Registry ProfileAssociations)
-/// Strictly maintains a SINGLE slot: only this profile is in the device's Windows profile association list.
+/// Bind one profile to a display in the OS color stack.
+///
+/// Windows: GDI `SetICMProfileW` plus a single-slot WCS association, which is
+/// what keeps the Calibration Loader from restoring the OEM profile. Linux: the
+/// association goes into the XDG sidecar file for colord to pick up later.
 pub fn sync_profile_to_windows(device_name: &str, file_name: &str) {
     if file_name.is_empty() {
         return;
     }
-
-    // 1. Set GDI device ICM profile
-    let wide_dev = to_wide(device_name);
-    let wide_file = to_wide(file_name);
-    unsafe {
-        let hdc = CreateDCW(std::ptr::null(), wide_dev.as_ptr(), std::ptr::null(), std::ptr::null());
-        if !hdc.0.is_null() {
-            let _ = SetICMProfileW(hdc, wide_file.as_ptr());
-            let _ = DeleteDC(hdc);
-        }
-    }
-
-    // Ensure profile is formally installed in system color spool
-    let sys_spool_dir = PathBuf::from(r"C:\Windows\System32\spool\drivers\color");
-    let spool_file = sys_spool_dir.join(file_name);
-    if spool_file.exists() {
-        let p_wide = to_wide(&spool_file.to_string_lossy());
-        unsafe {
-            let _ = InstallColorProfileW(std::ptr::null(), p_wide.as_ptr());
-        }
-    }
-
-    // 2. Resolve subkey strictly for this specific target device
-    let target_subkey = match get_monitor_class_subkey_for_device(device_name) {
-        Some(s) => s,
-        None => return,
-    };
-
-    use windows::Win32::System::Registry::{
-        HKEY_CURRENT_USER, RegCreateKeyExW, RegSetValueExW, KEY_READ, KEY_WRITE, REG_MULTI_SZ, REG_DWORD, REG_OPEN_CREATE_OPTIONS,
-    };
-
-    let base_path_w = to_wide(r"Software\Microsoft\Windows NT\CurrentVersion\ICM\ProfileAssociations\Display\{4d36e96e-e325-11ce-bfc1-08002be10318}");
-
-    // SINGLE SLOT STRATEGY: Only this single file is kept in ICMProfile and ICMProfileSnapshot.
-    let single_slot_multi_sz = encode_multi_sz(&[file_name]);
-
-    let val_name = to_wide("ICMProfile");
-    let snapshot_name = to_wide("ICMProfileSnapshot");
-    let user_flag = to_wide("UsePerUserProfiles");
-    let flag_val = 1u32.to_ne_bytes();
-
-    unsafe {
-        let mut hbase = windows::Win32::System::Registry::HKEY::default();
-        if RegCreateKeyExW(
-            HKEY_CURRENT_USER,
-            windows::core::PCWSTR(base_path_w.as_ptr()),
-            0,
-            windows::core::PCWSTR::null(),
-            REG_OPEN_CREATE_OPTIONS(0),
-            KEY_READ | KEY_WRITE,
-            None,
-            &mut hbase,
-            None,
-        ).is_ok() {
-            let sub_w = to_wide(&target_subkey);
-            let mut hsub = windows::Win32::System::Registry::HKEY::default();
-            if RegCreateKeyExW(
-                hbase,
-                windows::core::PCWSTR(sub_w.as_ptr()),
-                0,
-                windows::core::PCWSTR::null(),
-                REG_OPEN_CREATE_OPTIONS(0),
-                KEY_WRITE,
-                None,
-                &mut hsub,
-                None,
-            ).is_ok() {
-                let _ = RegSetValueExW(
-                    hsub,
-                    windows::core::PCWSTR(val_name.as_ptr()),
-                    0,
-                    REG_MULTI_SZ,
-                    Some(std::slice::from_raw_parts(
-                        single_slot_multi_sz.as_ptr() as *const u8,
-                        single_slot_multi_sz.len() * 2,
-                    )),
-                );
-                let _ = RegSetValueExW(
-                    hsub,
-                    windows::core::PCWSTR(snapshot_name.as_ptr()),
-                    0,
-                    REG_MULTI_SZ,
-                    Some(std::slice::from_raw_parts(
-                        single_slot_multi_sz.as_ptr() as *const u8,
-                        single_slot_multi_sz.len() * 2,
-                    )),
-                );
-                let _ = RegSetValueExW(
-                    hsub,
-                    windows::core::PCWSTR(user_flag.as_ptr()),
-                    0,
-                    REG_DWORD,
-                    Some(&flag_val),
-                );
-                let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-            }
-            let _ = windows::Win32::System::Registry::RegCloseKey(hbase);
-        }
+    if !dc::set_profile(device_name, file_name) {
+        crate::log_warn!(
+            "COLOR_CAL",
+            "Could not bind profile '{}' to {} on this platform",
+            file_name,
+            device_name
+        );
     }
 }
 
-/// Clear active color profile association from Windows GDI and Registry ProfileAssociations strictly for this specific display device.
-/// Setting UsePerUserProfiles to 1 with an EMPTY profile list tells Windows that the user explicitly chose no profile,
-/// strictly blocking Windows Calibration Loader and reboot sequence from falling back to OEM factory profiles.
+/// Clear the profile association for one display, blocking OEM fallback.
 pub fn clear_windows_profile_association(device_name: &str) {
-    let target_subkeys = get_monitor_class_subkeys_for_device(device_name);
-    if target_subkeys.is_empty() {
-        return;
-    }
-
-    use windows::Win32::System::Registry::{HKEY_CURRENT_USER, RegOpenKeyExW, RegDeleteValueW, RegSetValueExW, KEY_WRITE, REG_DWORD, REG_MULTI_SZ};
-    let empty_multi_sz = encode_multi_sz(&[]);
-    let flag_val = 1u32.to_ne_bytes(); // 1 = UsePerUserProfiles enabled, preventing Windows from falling back to HKLM/OEM driver profile
-
-    for sub in target_subkeys {
-        unsafe {
-            let sub_path = format!(r"Software\Microsoft\Windows NT\CurrentVersion\ICM\ProfileAssociations\Display\{{4d36e96e-e325-11ce-bfc1-08002be10318}}\{}", sub);
-            let sub_w = to_wide(&sub_path);
-            let mut hsub = windows::Win32::System::Registry::HKEY::default();
-            if RegOpenKeyExW(HKEY_CURRENT_USER, windows::core::PCWSTR(sub_w.as_ptr()), 0, KEY_WRITE, &mut hsub).is_ok() {
-                let snap_w = to_wide("ICMProfileSnapshot");
-                let _ = RegDeleteValueW(hsub, windows::core::PCWSTR(snap_w.as_ptr()));
-                let icm_w = to_wide("ICMProfile");
-                let _ = RegSetValueExW(
-                    hsub,
-                    windows::core::PCWSTR(icm_w.as_ptr()),
-                    0,
-                    REG_MULTI_SZ,
-                    Some(std::slice::from_raw_parts(
-                        empty_multi_sz.as_ptr() as *const u8,
-                        empty_multi_sz.len() * 2,
-                    )),
-                );
-                let user_flag = to_wide("UsePerUserProfiles");
-                let _ = RegSetValueExW(hsub, windows::core::PCWSTR(user_flag.as_ptr()), 0, REG_DWORD, Some(&flag_val));
-                let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-            }
-        }
-    }
+    dc::clear_profile(device_name);
 }
 
-/// Detect machine-specific factory profile for laptop internal screen
-/// Returns Option<(File Name, Friendly Model Label)>
+/// Detect the machine's factory profile for the internal panel, as
+/// `(file name, friendly label)`.
 pub fn detect_machine_factory_profile() -> Option<(String, String)> {
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RegOpenKeyExA, RegQueryValueExA, KEY_READ};
-    use windows::core::PCSTR;
-
-    let sys_spool_dir = PathBuf::from(r"C:\Windows\System32\spool\drivers\color");
-    if !sys_spool_dir.exists() {
-        return None;
-    }
-
-    // 1. Check monitor class keys in HKLM
-    let base_path = b"System\\CurrentControlSet\\Control\\Class\\{4d36e96e-e325-11ce-bfc1-08002be10318}\0";
-    let mut hbase = windows::Win32::System::Registry::HKEY::default();
-    unsafe {
-        if RegOpenKeyExA(HKEY_LOCAL_MACHINE, PCSTR(base_path.as_ptr()), 0, KEY_READ, &mut hbase).is_ok() {
-            let mut subkey_name = [0u8; 128];
-            let mut subkey_len = 128u32;
-            let mut idx = 0u32;
-            while idx < 16 && windows::Win32::System::Registry::RegEnumKeyExA(
-                hbase,
-                idx,
-                windows::core::PSTR(subkey_name.as_mut_ptr()),
-                &mut subkey_len,
-                None,
-                windows::core::PSTR(std::ptr::null_mut()),
-                None,
-                None,
-            ).is_ok() {
-                let name_str = std::str::from_utf8(&subkey_name[..subkey_len as usize]).unwrap_or("");
-                let full_sub = format!("System\\CurrentControlSet\\Control\\Class\\{{4d36e96e-e325-11ce-bfc1-08002be10318}}\\{}\0", name_str);
-                let mut hsub = windows::Win32::System::Registry::HKEY::default();
-                if RegOpenKeyExA(HKEY_LOCAL_MACHINE, PCSTR(full_sub.as_ptr()), 0, KEY_READ, &mut hsub).is_ok() {
-                    let mut buf = [0u8; 512];
-                    let mut buf_len = 512u32;
-                    let val_name = b"ICMProfile\0";
-                    if RegQueryValueExA(
-                        hsub,
-                        PCSTR(val_name.as_ptr()),
-                        None,
-                        None,
-                        Some(buf.as_mut_ptr()),
-                        Some(&mut buf_len),
-                    ).is_ok() && buf_len > 2 {
-                        let wide_slice = std::slice::from_raw_parts(buf.as_ptr() as *const u16, (buf_len / 2) as usize);
-                        let reg_file = String::from_utf16_lossy(wide_slice).trim_matches('\0').to_string();
-                        if !reg_file.is_empty() {
-                            let spool_candidate = sys_spool_dir.join(&reg_file);
-                            if spool_candidate.exists() {
-                                let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-                                let _ = windows::Win32::System::Registry::RegCloseKey(hbase);
-                                let model_label = reg_file.split('_').next().unwrap_or("出厂原装").to_string();
-                                return Some((reg_file, model_label));
-                            }
-                        }
-                    }
-                    let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-                }
-                idx += 1;
-                subkey_len = 128;
-            }
-            let _ = windows::Win32::System::Registry::RegCloseKey(hbase);
-        }
-    }
-
-    // 2. Scan spool directory for OEM vendor screen prefixes
-    if let Ok(entries) = fs::read_dir(&sys_spool_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_file() {
-                let fname = entry.file_name().to_string_lossy().to_string();
-                let f_upper = fname.to_uppercase();
-                if (f_upper.starts_with("BOE")
-                    || f_upper.starts_with("CSO")
-                    || f_upper.starts_with("AUO")
-                    || f_upper.starts_with("INN")
-                    || f_upper.starts_with("XMI"))
-                    && (f_upper.ends_with(".ICM") || f_upper.ends_with(".ICC"))
-                {
-                    let model_label = fname.split('_').next().unwrap_or("出厂原装").to_string();
-                    return Some((fname, model_label));
-                }
-            }
-        }
-    }
-
-    None
+    dc::factory_profile_hint()
 }
 
-/// Detect if HDR is currently active via registry (lightweight, non-blocking)
+/// Whether HDR is currently on (registry on Windows, connector colorspace on Linux).
 pub fn is_hdr_active() -> bool {
-    use windows::Win32::System::Registry::{HKEY_LOCAL_MACHINE, RegOpenKeyExA, RegQueryValueExA, KEY_READ, REG_DWORD};
-    use windows::core::PCSTR;
-
-    let path = b"SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers\\MonitorDataStore\0";
-    let mut hkey = windows::Win32::System::Registry::HKEY::default();
-    unsafe {
-        if RegOpenKeyExA(HKEY_LOCAL_MACHINE, PCSTR(path.as_ptr()), 0, KEY_READ, &mut hkey).is_ok() {
-            let mut subkey_name = [0u8; 128];
-            let mut subkey_len = 128u32;
-            let mut idx = 0u32;
-            while idx < 4 && windows::Win32::System::Registry::RegEnumKeyExA(
-                hkey,
-                idx,
-                windows::core::PSTR(subkey_name.as_mut_ptr()),
-                &mut subkey_len,
-                None,
-                windows::core::PSTR(std::ptr::null_mut()),
-                None,
-                None,
-            ).is_ok() {
-                let name_str = std::str::from_utf8(&subkey_name[..subkey_len as usize]).unwrap_or("");
-                let full_sub = format!("SYSTEM\\CurrentControlSet\\Control\\GraphicsDrivers\\MonitorDataStore\\{}\0", name_str);
-                let mut hsub = windows::Win32::System::Registry::HKEY::default();
-                if RegOpenKeyExA(HKEY_LOCAL_MACHINE, PCSTR(full_sub.as_ptr()), 0, KEY_READ, &mut hsub).is_ok() {
-                    let mut val_type = REG_DWORD;
-                    let mut val_data = 0u32;
-                    let mut val_len = 4u32;
-                    let val_name = b"HDREnabled\0";
-                    if RegQueryValueExA(
-                        hsub,
-                        PCSTR(val_name.as_ptr()),
-                        None,
-                        Some(&mut val_type as *mut _),
-                        Some(&mut val_data as *mut _ as *mut u8),
-                        Some(&mut val_len as *mut _),
-                    ).is_ok() && val_data == 1 {
-                        let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-                        let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
-                        return true;
-                    }
-                    let _ = windows::Win32::System::Registry::RegCloseKey(hsub);
-                }
-                idx += 1;
-                subkey_len = 128;
-            }
-            let _ = windows::Win32::System::Registry::RegCloseKey(hkey);
-        }
-    }
-    false
+    dc::hdr_active()
 }
 
 /// List all available color profiles tailored for the monitor
@@ -1084,15 +667,7 @@ pub fn import_custom_icc(file_name: &str, file_bytes: &[u8]) -> Result<ColorProf
     let user_path = get_user_icc_dir().join(&clean_fname);
     fs::write(&user_path, file_bytes).map_err(|e| format!("保存校色文件失败: {}", e))?;
 
-    let sys_spool = PathBuf::from(r"C:\Windows\System32\spool\drivers\color");
-    if sys_spool.exists() {
-        let sys_file = sys_spool.join(&clean_fname);
-        let _ = fs::copy(&user_path, &sys_file);
-        unsafe {
-            let p = to_wide(&sys_file.to_string_lossy());
-            let _ = InstallColorProfileW(std::ptr::null(), p.as_ptr());
-        }
-    }
+    let _ = dc::install_profile(&user_path);
 
     let item = ColorProfileItem {
         id: format!("custom_{}", clean_fname),
@@ -1136,34 +711,13 @@ pub fn delete_custom_icc(profile_id: &str, device_name: Option<&str>) -> Result<
     Ok(())
 }
 
-/// Enumerate all active display device names attached to the desktop (e.g. `\\.\DISPLAY1`).
+/// Names of every attached display (`\\.\DISPLAY1` on Windows, `card0-eDP-1` on Linux).
 pub fn enumerate_active_display_devices() -> Vec<String> {
-    let mut devices = Vec::new();
-    const DISPLAY_DEVICE_ATTACHED_TO_DESKTOP: u32 = 0x0000_0001;
-    unsafe {
-        for idx in 0..16 {
-            let mut dd = DISPLAY_DEVICEW {
-                cb: std::mem::size_of::<DISPLAY_DEVICEW>() as u32,
-                device_name: [0; 32],
-                device_string: [0; 128],
-                state_flags: 0,
-                device_id: [0; 128],
-                device_key: [0; 128],
-            };
-            if !EnumDisplayDevicesW(std::ptr::null(), idx, &mut dd, 0).as_bool() {
-                break;
-            }
-            if (dd.state_flags & DISPLAY_DEVICE_ATTACHED_TO_DESKTOP) != 0 {
-                let name = String::from_utf16_lossy(&dd.device_name)
-                    .trim_matches('\0')
-                    .to_string();
-                if !name.is_empty() {
-                    devices.push(name);
-                }
-            }
-        }
-    }
-    devices
+    dc::active_devices()
+        .into_iter()
+        .filter(|d| d.attached)
+        .map(|d| d.name)
+        .collect()
 }
 
 /// Resolve the currently active ICC profile's hardware gamma ramp for a display device,

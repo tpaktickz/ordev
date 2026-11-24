@@ -1,6 +1,4 @@
 use serde::{Deserialize, Serialize};
-use std::os::windows::process::CommandExt;
-use std::process::Command;
 
 pub mod audio;
 pub mod camera;
@@ -22,6 +20,7 @@ pub use touchpad::{
     start_touchpad_listener, write_ptp_registry_enabled,
 };
 
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 static KEEP_AWAKE_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -37,25 +36,30 @@ pub fn set_win_key_locked(locked: bool) {
     WIN_KEY_LOCKED.store(locked, std::sync::atomic::Ordering::Relaxed);
 }
 
+#[cfg(windows)]
 #[repr(C)]
 pub struct LASTINPUTINFO {
     pub cb_size: u32,
     pub dw_time: u32,
 }
 
+#[cfg(windows)]
 #[link(name = "user32")]
 extern "system" {
     pub fn BlockInput(f_block_it: i32) -> i32;
     pub fn GetLastInputInfo(plii: *mut LASTINPUTINFO) -> i32;
 }
 
+#[cfg(windows)]
 #[link(name = "kernel32")]
 extern "system" {
     pub fn GetTickCount() -> u32;
 }
 
+#[cfg(windows)]
 struct BlockInputGuard;
 
+#[cfg(windows)]
 impl Drop for BlockInputGuard {
     fn drop(&mut self) {
         unsafe {
@@ -63,6 +67,130 @@ impl Drop for BlockInputGuard {
         }
     }
 }
+
+// ---------------------------------------------------------------------------
+// Platform shims: the three Win32 primitives this module used inline
+// (BlockInput, GetTickCount, SC_MONITORPOWER) plus the vendor tool wrappers.
+// ---------------------------------------------------------------------------
+
+#[cfg(windows)]
+fn block_peripheral_input(on: bool) {
+    unsafe {
+        BlockInput(if on { 1 } else { 0 });
+    }
+}
+
+/// Wayland/X11 have no BlockInput equivalent: inputs stay live, and the grace
+/// period is enforced by the delay alone.
+#[cfg(not(windows))]
+fn block_peripheral_input(_on: bool) {}
+
+#[cfg(windows)]
+fn tick_count() -> u32 {
+    unsafe { GetTickCount() }
+}
+
+#[cfg(not(windows))]
+fn tick_count() -> u32 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_millis() as u32
+}
+
+#[cfg(windows)]
+fn monitor_power_off() {
+    const WM_SYSCOMMAND: u32 = 0x0112;
+    const SC_MONITORPOWER: usize = 0xF170;
+    unsafe {
+        let desktop = windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow();
+        let _ = windows::Win32::UI::WindowsAndMessaging::DefWindowProcW(
+            desktop,
+            WM_SYSCOMMAND,
+            windows::Win32::Foundation::WPARAM(SC_MONITORPOWER),
+            windows::Win32::Foundation::LPARAM(2),
+        );
+    }
+}
+
+/// Display power-off has no freedesktop API; Wayland leaves it to each
+/// compositor, so every known shell CLI is tried in turn and X11 is last.
+#[cfg(not(windows))]
+fn monitor_power_off() {
+    let attempts: [(&str, &[&str]); 4] = [
+        ("swaymsg", &["output", "*", "power", "off"]),
+        ("hyprctl", &["dispatch", "dpms", "off"]),
+        ("kscreen-doctor", &["--dpms", "off"]),
+        ("xset", &["dpms", "force", "off"]),
+    ];
+    for (program, args) in attempts {
+        if crate::pal::process::command(program)
+            .args(args)
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+        {
+            crate::log_info!("SCREEN", "Display powered off via {}", program);
+            return;
+        }
+    }
+    crate::log_warn!(
+        "SCREEN",
+        "No display power-off backend answered (tried swaymsg, hyprctl, kscreen-doctor, xset)"
+    );
+}
+
+/// Windows Settings' touchpad toggle (elevated helper).
+#[cfg(windows)]
+fn touchpad_admin_flow(enable: bool) {
+    use std::os::windows::process::CommandExt;
+    let _ = std::process::Command::new("C:\\Windows\\System32\\SystemSettingsAdminFlows.exe")
+        .arg("EnableTouchpad")
+        .arg(if enable { "1" } else { "0" })
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+}
+
+/// The EC bit is the whole story on Linux; there is no second switch to flip.
+#[cfg(not(windows))]
+fn touchpad_admin_flow(_enable: bool) {}
+
+#[cfg(windows)]
+fn camera_pnp(enable: bool) {
+    use std::os::windows::process::CommandExt;
+    let action = if enable { "/enable-device" } else { "/disable-device" };
+    for class in ["Camera", "Image"] {
+        let _ = std::process::Command::new("pnputil")
+            .args([action, "/class", class])
+            .creation_flags(CREATE_NO_WINDOW)
+            .output();
+    }
+}
+
+/// Camera enable/disable is a PnP action on Windows; on Linux the device stays
+/// bound and only the EC power line is cut, so nothing to do here.
+#[cfg(not(windows))]
+fn camera_pnp(_enable: bool) {}
+
+#[cfg(windows)]
+fn netsh_set_wifi(adapter: &str, enable: bool) {
+    use std::os::windows::process::CommandExt;
+    let admin = if enable { "ENABLED" } else { "DISABLED" };
+    let _ = std::process::Command::new("netsh")
+        .args([
+            "interface",
+            "set",
+            "interface",
+            &format!("name=\"{adapter}\""),
+            &format!("admin={admin}"),
+        ])
+        .creation_flags(CREATE_NO_WINDOW)
+        .output();
+}
+
+/// rfkill already did the work on Linux.
+#[cfg(not(windows))]
+fn netsh_set_wifi(_adapter: &str, _enable: bool) {}
 
 pub fn set_keep_awake(enable: bool) {
     KEEP_AWAKE_ACTIVE.store(enable, std::sync::atomic::Ordering::Relaxed);
@@ -96,39 +224,24 @@ pub fn turn_off_screen() -> Result<(), String> {
     set_screen_off(true);
 
     std::thread::spawn(|| {
-        let _guard = BlockInputGuard;
-
         // 1. Brief delay to allow mouse-up / click release events to clear
         std::thread::sleep(std::time::Duration::from_millis(150));
 
         // 2. Block peripheral inputs (mouse & keyboard) so hand movement doesn't wake display immediately
-        unsafe {
-            BlockInput(1);
-        }
+        block_peripheral_input(true);
 
-        // 4. Send SC_MONITORPOWER message to power off monitors via our own dedicated window
-        // NEVER broadcast to HWND_BROADCAST (0xFFFF), which triggers Modern Standby & OS sleep!
-        unsafe {
-            const WM_SYSCOMMAND: u32 = 0x0112;
-            const SC_MONITORPOWER: usize = 0xF170;
-            let desktop = windows::Win32::UI::WindowsAndMessaging::GetDesktopWindow();
-            let _ = windows::Win32::UI::WindowsAndMessaging::DefWindowProcW(
-                desktop,
-                WM_SYSCOMMAND,
-                windows::Win32::Foundation::WPARAM(SC_MONITORPOWER),
-                windows::Win32::Foundation::LPARAM(2),
-            );
-        }
+        // 3. Power the display off
+        monitor_power_off();
 
-        // 5. 3-second grace period for the user to step away
+        // 4. 3-second grace period for the user to step away
         std::thread::sleep(std::time::Duration::from_millis(3000));
 
-        // 6. Record the unblock tick before restoring input
-        let tick = unsafe { GetTickCount() };
+        // 5. Record the unblock tick before restoring input
+        let tick = tick_count();
         SCREEN_OFF_UNBLOCK_TICK.store(tick, std::sync::atomic::Ordering::Relaxed);
 
-        // 7. Unblock peripheral inputs safely
-        drop(_guard);
+        // 6. Unblock peripheral inputs safely
+        block_peripheral_input(false);
         crate::log_info!("SCREEN", "3-second grace period ended. Peripheral input restored (subsequent interaction will wake display).");
     });
 
@@ -166,10 +279,7 @@ pub fn get_switches_state() -> QuickSwitchesState {
                 crate::driver::wmi_ec::TOUCHPAD_BITMASK,
                 false,
             );
-            let _ = Command::new("C:\\Windows\\System32\\SystemSettingsAdminFlows.exe")
-                .creation_flags(CREATE_NO_WINDOW)
-                .args(["EnableTouchpad", "0"])
-                .output();
+            touchpad_admin_flow(false);
             touchpad::write_ptp_registry_enabled(false);
             crate::log_info!("DEVICE_SWITCH", "First-run restored Touchpad: disabled");
         } else {
@@ -339,12 +449,8 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
                 crate::log_info!("DEVICE_SWITCH", "Wi-Fi radio toggled to {} via WinRT Radio API", enable);
             } else {
                 let adapter_name = radio::get_or_detect_wifi_adapter(&mut cfg);
-                let admin_state = if enable { "ENABLED" } else { "DISABLED" };
-                let _ = Command::new("netsh")
-                    .creation_flags(CREATE_NO_WINDOW)
-                    .args(["interface", "set", "interface", &format!("name=\"{}\"", adapter_name), &format!("admin={}", admin_state)])
-                    .output();
-                crate::log_info!("DEVICE_SWITCH", "Wi-Fi ({}) set to {} via netsh", adapter_name, admin_state);
+                netsh_set_wifi(&adapter_name, enable);
+                crate::log_info!("DEVICE_SWITCH", "Wi-Fi ({}) set to {} via interface admin state", adapter_name, enable);
             }
             cfg.wifi_enabled = enable;
         }
@@ -370,13 +476,8 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
                 enable,
             );
 
-            // 2. Windows System-Level Precision Touchpad Toggle:
-            // Invoke SystemSettingsAdminFlows.exe (Windows native Settings utility, runs elevated)
-            let admin_flows_val = if enable { "1" } else { "0" };
-            let _ = Command::new("C:\\Windows\\System32\\SystemSettingsAdminFlows.exe")
-                .creation_flags(CREATE_NO_WINDOW)
-                .args(["EnableTouchpad", admin_flows_val])
-                .output();
+            // 2. OS-level Precision Touchpad toggle (Windows Settings helper)
+            touchpad_admin_flow(enable);
 
             // 3. Synchronize Windows Precision Touchpad (PTP) Registry (1 = On, 0 = Off) via 0ms native Win32 API
             touchpad::write_ptp_registry_enabled(enable);
@@ -385,16 +486,8 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
             cfg.touchpad_enabled = enable;
         }
         "camera" => {
-            // 1. Hardware device disable/enable via Windows PnP utility (Universal across all Windows laptops)
-            let action = if enable { "/enable-device" } else { "/disable-device" };
-            let _ = Command::new("pnputil")
-                .creation_flags(CREATE_NO_WINDOW)
-                .args([action, "/class", "Camera"])
-                .output();
-            let _ = Command::new("pnputil")
-                .creation_flags(CREATE_NO_WINDOW)
-                .args([action, "/class", "Image"])
-                .output();
+            // 1. Hardware device enable/disable (PnP on Windows, EC line on Linux)
+            camera_pnp(enable);
 
             // 2. Windows Camera Group Policy (AllowCamera)
             camera::write_camera_policy_registry(enable);

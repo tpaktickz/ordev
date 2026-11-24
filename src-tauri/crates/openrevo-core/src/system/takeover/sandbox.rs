@@ -1,26 +1,20 @@
-//! Autostart, Registry, and Task Scheduler Isolation Sandbox
+//! Autostart, registry, and service isolation sandbox.
 //!
-//! Enforces Level 1.1 Specification from Sovereign Architecture Blueprint:
-//! - Complete 12-task synchronization from restore_official_control_center.ps1
-//! - Atomic Run key backup (OpenRevoBackup_) & restore across HKLM and HKCU
-//! - UWP AppModel Modern StartupTask toggle (State = 1 vs State = 2)
-//! - Ghost tray icon sweeping via Win32 Shell_TrayWnd toolbar messages
+//! Level 1.1 of the takeover spec, expressed portably:
+//! - OEM autostart entries neutralized and restorable: Windows Run keys (backed
+//!   up under `OpenRevoBackup_`) and Scheduled Tasks; on Linux, XDG autostart
+//!   entries and OEM systemd units.
+//! - Modern startup-task toggles: UWP AppModel `State` on Windows, no-op on
+//!   Linux (there is no AppModel).
+//! - Shell notification-area refresh: `Shell_TrayWnd` poking on Windows; the
+//!   StatusNotifierItem host has no equivalent, so Linux is a no-op.
+//!
+//! All registry access goes through [`crate::pal::reg`], which is a no-op on
+//! Linux — the Windows branches below therefore stay readable.
 
-#[cfg(target_os = "windows")]
-use windows::core::{w, PCWSTR};
-#[cfg(target_os = "windows")]
-use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
-#[cfg(target_os = "windows")]
-use windows::Win32::System::Registry::{
-    HKEY, HKEY_CURRENT_USER, HKEY_LOCAL_MACHINE, KEY_READ, KEY_WRITE, RegCloseKey, RegDeleteValueW,
-    RegEnumValueW, RegOpenKeyExW, RegSetValueExW, REG_DWORD,
-};
-#[cfg(target_os = "windows")]
-use windows::Win32::UI::WindowsAndMessaging::{
-    FindWindowExW, FindWindowW, GetClientRect, SendMessageW, WM_MOUSEMOVE,
-};
+use crate::pal::reg::{self, RegRoot};
 
-/// 12 Full verified official scheduled tasks across all OEM variants
+/// OEM startup task/unit names shared by every Uniwill/Mechrevo variant.
 pub const OEM_TASKS: &[&str] = &[
     "ControlCenter",
     "ControlCenterTray",
@@ -36,387 +30,271 @@ pub const OEM_TASKS: &[&str] = &[
     "OEMService",
 ];
 
-#[cfg(target_os = "windows")]
+/// Substrings that identify an OEM value name in Run keys / StartupApproved.
+const OEM_NAME_PATTERNS: &[&str] = &[
+    "controlcenter",
+    "gamingcenter",
+    "gcuservice",
+    "gcubridge",
+    "aistone",
+    "mycontrolcenter",
+    "uniwill",
+    "osdtp",
+    "systray",
+    "ccu",
+];
+
+/// Run-key locations the OEM software uses, per root.
+const RUN_KEYS: &[(RegRoot, &str)] = &[
+    (RegRoot::Machine, r"SOFTWARE\Microsoft\Windows\CurrentVersion\Run"),
+    (RegRoot::Machine, r"SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Run"),
+    (RegRoot::User, r"Software\Microsoft\Windows\CurrentVersion\Run"),
+];
+
+#[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x08000000;
 
-#[cfg(target_os = "windows")]
+#[cfg(windows)]
 fn run_cmd_quiet(cmd: &str, args: &[&str]) -> (Option<i32>, String, String) {
     use std::os::windows::process::CommandExt;
-    match std::process::Command::new(cmd).args(args).creation_flags(CREATE_NO_WINDOW).output() {
-        Ok(out) => {
-            let code = out.status.code();
-            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            (code, stdout, stderr)
-        }
+    match std::process::Command::new(cmd)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+    {
+        Ok(out) => (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stdout).trim().to_string(),
+            String::from_utf8_lossy(&out.stderr).trim().to_string(),
+        ),
         Err(e) => (None, String::new(), e.to_string()),
     }
 }
 
-/// Fast check if a Windows Registry subkey exists (< 0.01ms)
-pub fn reg_key_exists(hkey_root: HKEY, subkey: &str) -> bool {
-    let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegOpenKeyExW(
-            hkey_root,
-            PCWSTR(wide_sub.as_ptr()),
-            0,
-            KEY_READ,
-            &mut hkey,
-        )
-        .is_ok()
-        {
-            let _ = RegCloseKey(hkey);
-            true
-        } else {
-            false
-        }
-    }
+/// Fast check whether a registry subkey exists. Linux: always `false`.
+pub fn reg_key_exists(root: RegRoot, subkey: &str) -> bool {
+    reg::key_exists(root, subkey)
 }
 
-/// Helper to set DWORD registry value
-pub fn set_reg_dword(hkey_root: HKEY, subkey: &str, value_name: &str, val: u32) {
-    let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-    let wide_val: Vec<u16> = format!("{}\0", value_name).encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegOpenKeyExW(
-            hkey_root,
-            PCWSTR(wide_sub.as_ptr()),
-            0,
-            KEY_WRITE,
-            &mut hkey,
-        )
-        .is_ok()
-        {
-            let _ = RegSetValueExW(
-                hkey,
-                PCWSTR(wide_val.as_ptr()),
-                0,
-                REG_DWORD,
-                Some(std::slice::from_raw_parts(&val as *const u32 as *const u8, 4)),
-            );
-            let _ = RegCloseKey(hkey);
-        }
-    }
+/// Write a DWORD value. Linux: no-op.
+pub fn set_reg_dword(root: RegRoot, subkey: &str, value_name: &str, val: u32) {
+    reg::set_dword(root, subkey, value_name, val);
 }
 
-/// Neutralizes Run keys by backing them up to OpenRevoBackup_ prefix
+/// Neutralize OEM autostart entries by moving them aside (reversible).
 pub fn neutralize_run_keys() {
-    let run_roots = [
-        (HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-    ];
-
-    for (root, subkey) in run_roots {
-        let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-        let mut hkey = HKEY::default();
-        unsafe {
-            if RegOpenKeyExW(root, PCWSTR(wide_sub.as_ptr()), 0, KEY_READ | KEY_WRITE, &mut hkey).is_ok() {
-                let mut index = 0u32;
-                let mut to_backup = Vec::new();
-                loop {
-                    let mut name_buf = [0u16; 256];
-                    let mut name_len = name_buf.len() as u32;
-                    let mut val_type = 0u32;
-                    let mut data_buf = [0u8; 1024];
-                    let mut data_len = data_buf.len() as u32;
-
-                    let status = RegEnumValueW(
-                        hkey,
-                        index,
-                        windows::core::PWSTR(name_buf.as_mut_ptr()),
-                        &mut name_len,
-                        None,
-                        Some(&mut val_type),
-                        Some(data_buf.as_mut_ptr()),
-                        Some(&mut data_len),
-                    );
-
-                    if status.is_err() {
-                        break;
-                    }
-
-                    let val_name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
-                    let lower = val_name.to_lowercase();
-                    if lower.contains("controlcenter")
-                        || lower.contains("gamingcenter")
-                        || lower.contains("gcuservice")
-                        || lower.contains("gcubridge")
-                        || lower.contains("aistone")
-                        || lower.contains("mycontrolcenter")
-                        || lower.contains("uniwill")
-                        || lower.contains("osdtp")
-                        || lower.contains("systray")
-                        || lower.contains("ccu")
-                    {
-                        to_backup.push((val_name, val_type, data_buf[..data_len as usize].to_vec()));
-                    }
-                    index += 1;
-                }
-
-                for (name, val_type, data) in to_backup {
-                    let backup_name = format!("OpenRevoBackup_{}\0", name);
-                    let wide_backup: Vec<u16> = backup_name.encode_utf16().collect();
-                    let wide_orig: Vec<u16> = format!("{}\0", name).encode_utf16().collect();
-
-                    let _ = RegSetValueExW(
-                        hkey,
-                        PCWSTR(wide_backup.as_ptr()),
-                        0,
-                        windows::Win32::System::Registry::REG_VALUE_TYPE(val_type),
-                        Some(&data),
-                    );
-                    let _ = RegDeleteValueW(hkey, PCWSTR(wide_orig.as_ptr()));
-                }
-
-                let _ = RegCloseKey(hkey);
-            }
+    for (root, subkey) in RUN_KEYS {
+        let moved = reg::backup_matching_values(*root, subkey, OEM_NAME_PATTERNS);
+        if moved > 0 {
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "Run key '{}': backed up and disabled {} entr{}",
+                subkey,
+                moved,
+                if moved == 1 { "y" } else { "ies" }
+            );
         }
     }
 }
 
-/// Restores Run keys from OpenRevoBackup_ prefix
+/// Restore OEM autostart entries previously moved aside.
 pub fn restore_run_keys() {
-    let run_roots = [
-        (HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\Microsoft\\Windows\\CurrentVersion\\Run"),
-        (HKEY_CURRENT_USER, "Software\\Microsoft\\Windows\\CurrentVersion\\Run"),
-    ];
+    for (root, subkey) in RUN_KEYS {
+        let restored = reg::restore_backup_values(*root, subkey);
+        if restored > 0 {
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "Run key '{}': restored {} entr{}",
+                subkey,
+                restored,
+                if restored == 1 { "y" } else { "ies" }
+            );
+        }
+    }
+}
 
-    for (root, subkey) in run_roots {
-        let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-        let mut hkey = HKEY::default();
-        unsafe {
-            if RegOpenKeyExW(root, PCWSTR(wide_sub.as_ptr()), 0, KEY_READ | KEY_WRITE, &mut hkey).is_ok() {
-                let mut index = 0u32;
-                let mut to_restore = Vec::new();
-                loop {
-                    let mut name_buf = [0u16; 256];
-                    let mut name_len = name_buf.len() as u32;
-                    let mut val_type = 0u32;
-                    let mut data_buf = [0u8; 1024];
-                    let mut data_len = data_buf.len() as u32;
+#[cfg(windows)]
+fn oem_task_registered(task: &str) -> bool {
+    let key_path = format!(
+        r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\{}",
+        task
+    );
+    reg_key_exists(RegRoot::Machine, &key_path)
+}
 
-                    let status = RegEnumValueW(
-                        hkey,
-                        index,
-                        windows::core::PWSTR(name_buf.as_mut_ptr()),
-                        &mut name_len,
-                        None,
-                        Some(&mut val_type),
-                        Some(data_buf.as_mut_ptr()),
-                        Some(&mut data_len),
-                    );
+/// Disable every OEM startup task that exists on this machine.
+pub fn disable_scheduled_tasks() {
+    #[cfg(windows)]
+    for task in OEM_TASKS {
+        if oem_task_registered(task) {
+            let (code, _, _) = run_cmd_quiet("schtasks.exe", &["/change", "/tn", task, "/disable"]);
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "Task '{}': disabled (code: {:?})",
+                task,
+                code
+            );
+        }
+    }
 
-                    if status.is_err() {
-                        break;
-                    }
+    #[cfg(target_os = "linux")]
+    for unit in oem_systemd_units() {
+        let (code, _, err) = crate::pal::process::run_quiet(
+            "systemctl",
+            &["--user", "mask", "--now", &unit],
+        );
+        crate::log_info!(
+            "TAKEOVER_SANDBOX",
+            "Unit '{}': masked (code: {:?}{})",
+            unit,
+            code,
+            if err.is_empty() {
+                String::new()
+            } else {
+                format!(", {err}")
+            }
+        );
+    }
+}
 
-                    let val_name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
-                    if val_name.starts_with("OpenRevoBackup_") {
-                        let orig_name = val_name["OpenRevoBackup_".len()..].to_string();
-                        to_restore.push((val_name, orig_name, val_type, data_buf[..data_len as usize].to_vec()));
-                    }
-                    index += 1;
-                }
+/// Re-enable every OEM startup task that exists on this machine.
+pub fn enable_scheduled_tasks() {
+    #[cfg(windows)]
+    for task in OEM_TASKS {
+        if oem_task_registered(task) {
+            let (code, _, _) = run_cmd_quiet("schtasks.exe", &["/change", "/tn", task, "/enable"]);
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "Task '{}': enabled (code: {:?})",
+                task,
+                code
+            );
+        }
+    }
 
-                for (backup_name, orig_name, val_type, data) in to_restore {
-                    let wide_orig: Vec<u16> = format!("{}\0", orig_name).encode_utf16().collect();
-                    let wide_backup: Vec<u16> = format!("{}\0", backup_name).encode_utf16().collect();
+    #[cfg(target_os = "linux")]
+    for unit in oem_systemd_units() {
+        let (code, _, _) =
+            crate::pal::process::run_quiet("systemctl", &["--user", "unmask", &unit]);
+        crate::log_info!(
+            "TAKEOVER_SANDBOX",
+            "Unit '{}': unmasked (code: {:?})",
+            unit,
+            code
+        );
+    }
+}
 
-                    let _ = RegSetValueExW(
-                        hkey,
-                        PCWSTR(wide_orig.as_ptr()),
-                        0,
-                        windows::Win32::System::Registry::REG_VALUE_TYPE(val_type),
-                        Some(&data),
-                    );
-                    let _ = RegDeleteValueW(hkey, PCWSTR(wide_backup.as_ptr()));
-                }
-
-                let _ = RegCloseKey(hkey);
+/// OEM systemd units that actually exist for this user, derived from
+/// [`OEM_TASKS`] by lowercasing and probing both `.service` and the bare name.
+#[cfg(target_os = "linux")]
+fn oem_systemd_units() -> Vec<String> {
+    let mut units = Vec::new();
+    for task in OEM_TASKS {
+        let base = task.to_lowercase();
+        for candidate in [format!("{base}.service"), format!("openrevo-oem-{base}.service")] {
+            let (code, _, _) = crate::pal::process::run_quiet(
+                "systemctl",
+                &["--user", "cat", &candidate],
+            );
+            if code == Some(0) && !units.contains(&candidate) {
+                units.push(candidate);
             }
         }
     }
+    units
 }
 
-/// Disables all 12 official Scheduled Tasks
-pub fn disable_scheduled_tasks() {
-    for task in OEM_TASKS {
-        let key_path = format!(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\{}", task);
-        if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
-            let (code, _, _) = run_cmd_quiet("schtasks.exe", &["/change", "/tn", task, "/disable"]);
-            crate::log_info!("TAKEOVER_SANDBOX", "Task '{}': Disabled (code: {:?})", task, code);
-        }
-    }
-}
-
-/// Enables all 12 official Scheduled Tasks
-pub fn enable_scheduled_tasks() {
-    for task in OEM_TASKS {
-        let key_path = format!(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\{}", task);
-        if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
-            let (code, _, _) = run_cmd_quiet("schtasks.exe", &["/change", "/tn", task, "/enable"]);
-            crate::log_info!("TAKEOVER_SANDBOX", "Task '{}': Enabled (code: {:?})", task, code);
-        }
-    }
-}
-
-/// Controls UWP AppModel StartupTask execution state (State = 1: Disabled, State = 2: Enabled)
+/// Toggle UWP AppModel startup-task state: `1` disabled, `2` enabled.
+/// Linux: no-op (no AppModel), the dynamic scan finds nothing.
 pub fn set_uwp_appmodel_startup_state(disable: bool) {
     let target_state: u32 = if disable { 1 } else { 2 };
+    const BASE: &str = r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData";
 
-    let known_task_subkeys = [
-        r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\ControlCenter3_wrbgcf7aesyd8\ControlCenterTray",
-        r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\ControlCenter3_h329z55cwnj8g\ControlCenterTray",
-        r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\CCU.WinUI_wrbgcf7aesyd8\ControlCenterTray",
-        r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\CCU.WinUI_wrbgcf7aesyd8\CCU",
-        r"Software\Classes\Local Settings\Software\Microsoft\Windows\CurrentVersion\AppModel\SystemAppData\CCU.WinUI_wrbgcf7aesyd8\SystrayComponent",
+    let known = [
+        r"ControlCenter3_wrbgcf7aesyd8\ControlCenterTray",
+        r"ControlCenter3_h329z55cwnj8g\ControlCenterTray",
+        r"CCU.WinUI_wrbgcf7aesyd8\ControlCenterTray",
+        r"CCU.WinUI_wrbgcf7aesyd8\CCU",
+        r"CCU.WinUI_wrbgcf7aesyd8\SystrayComponent",
     ];
-
-    for subkey in known_task_subkeys {
-        if reg_key_exists(HKEY_CURRENT_USER, subkey) {
-            set_reg_dword(HKEY_CURRENT_USER, subkey, "State", target_state);
-            crate::log_info!("TAKEOVER_SANDBOX", "UWP AppModel task '{}': State set to {}", subkey, target_state);
+    for leaf in known {
+        let subkey = format!(r"{BASE}\{leaf}");
+        if reg_key_exists(RegRoot::User, &subkey) {
+            set_reg_dword(RegRoot::User, &subkey, "State", target_state);
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "UWP AppModel task '{}': State set to {}",
+                subkey,
+                target_state
+            );
         }
     }
 
-    // Dynamic scan over AppModel\SystemAppData for new or customized package families
-    let base_sub = "Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\SystemAppData\0";
-    let wide_base: Vec<u16> = base_sub.encode_utf16().collect();
-    let mut h_base = HKEY::default();
-    unsafe {
-        if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_base.as_ptr()), 0, KEY_READ, &mut h_base).is_ok() {
-            let mut pfn_idx = 0u32;
-            loop {
-                let mut pfn_buf = [0u16; 256];
-                let mut pfn_len = pfn_buf.len() as u32;
-                if windows::Win32::System::Registry::RegEnumKeyExW(
-                    h_base,
-                    pfn_idx,
-                    windows::core::PWSTR(pfn_buf.as_mut_ptr()),
-                    &mut pfn_len,
-                    None,
-                    windows::core::PWSTR::null(),
-                    None,
-                    None,
-                )
-                .is_err()
-                {
-                    break;
-                }
-                let pfn_str = String::from_utf16_lossy(&pfn_buf[..pfn_len as usize]);
-                let pfn_lower = pfn_str.to_lowercase();
-                if pfn_lower.contains("controlcenter") || pfn_lower.contains("gamingcenter") || pfn_lower.contains("ccu") {
-                    let pfn_sub = format!("Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\SystemAppData\\{}\0", pfn_str);
-                    let wide_pfn_sub: Vec<u16> = pfn_sub.encode_utf16().collect();
-                    let mut h_pfn = HKEY::default();
-                    if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_pfn_sub.as_ptr()), 0, KEY_READ, &mut h_pfn).is_ok() {
-                        let mut task_idx = 0u32;
-                        loop {
-                            let mut task_buf = [0u16; 256];
-                            let mut task_len = task_buf.len() as u32;
-                            if windows::Win32::System::Registry::RegEnumKeyExW(
-                                h_pfn,
-                                task_idx,
-                                windows::core::PWSTR(task_buf.as_mut_ptr()),
-                                &mut task_len,
-                                None,
-                                windows::core::PWSTR::null(),
-                                None,
-                                None,
-                            )
-                            .is_err()
-                            {
-                                break;
-                            }
-                            let task_str = String::from_utf16_lossy(&task_buf[..task_len as usize]);
-                            let task_lower = task_str.to_lowercase();
-                            if task_lower.contains("tray") || task_lower.contains("ccu") || task_lower.contains("systray") {
-                                let full_task_sub = format!("Software\\Classes\\Local Settings\\Software\\Microsoft\\Windows\\CurrentVersion\\AppModel\\SystemAppData\\{}\\{}", pfn_str, task_str);
-                                set_reg_dword(HKEY_CURRENT_USER, &full_task_sub, "State", target_state);
-                                crate::log_info!("TAKEOVER_SANDBOX", "UWP AppModel dynamic task '{}': State set to {}", full_task_sub, target_state);
-                            }
-                            task_idx += 1;
-                        }
-                        let _ = RegCloseKey(h_pfn);
-                    }
-                }
-                pfn_idx += 1;
+    // Dynamic scan: package families differ per OEM build, and users may have
+    // installed a variant we don't list.
+    for family in reg::enum_subkeys(RegRoot::User, BASE) {
+        let family_lower = family.to_lowercase();
+        if !(family_lower.contains("controlcenter")
+            || family_lower.contains("gamingcenter")
+            || family_lower.contains("ccu"))
+        {
+            continue;
+        }
+        let family_key = format!(r"{BASE}\{family}");
+        for task in reg::enum_subkeys(RegRoot::User, &family_key) {
+            let task_lower = task.to_lowercase();
+            if !(task_lower.contains("tray")
+                || task_lower.contains("ccu")
+                || task_lower.contains("systray"))
+            {
+                continue;
             }
-            let _ = RegCloseKey(h_base);
+            let full = format!(r"{family_key}\{task}");
+            set_reg_dword(RegRoot::User, &full, "State", target_state);
+            crate::log_info!(
+                "TAKEOVER_SANDBOX",
+                "UWP AppModel dynamic task '{}': State set to {}",
+                full,
+                target_state
+            );
         }
     }
 }
 
-/// Updates Explorer StartupApproved\StartupTask byteflags (0x02 = Enabled, 0x03 = Disabled)
+/// Update Explorer `StartupApproved\StartupTask` byte flags
+/// (`0x02` enabled, `0x03` disabled). Linux: no-op.
 pub fn update_uwp_startup_task(disable: bool) {
-    let subkey = "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Explorer\\StartupApproved\\StartupTask\0";
-    let wide_sub: Vec<u16> = subkey.encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegOpenKeyExW(HKEY_CURRENT_USER, PCWSTR(wide_sub.as_ptr()), 0, KEY_READ | KEY_WRITE, &mut hkey).is_ok() {
-            let mut index = 0u32;
-            let mut to_update = Vec::new();
-            loop {
-                let mut name_buf = [0u16; 256];
-                let mut name_len = name_buf.len() as u32;
-                let mut val_type = 0u32;
-                let mut data_buf = [0u8; 64];
-                let mut data_len = data_buf.len() as u32;
-
-                let status = RegEnumValueW(
-                    hkey,
-                    index,
-                    windows::core::PWSTR(name_buf.as_mut_ptr()),
-                    &mut name_len,
-                    None,
-                    Some(&mut val_type),
-                    Some(data_buf.as_mut_ptr()),
-                    Some(&mut data_len),
-                );
-
-                if status.is_err() {
-                    break;
-                }
-
-                let val_name = String::from_utf16_lossy(&name_buf[..name_len as usize]);
-                let lower = val_name.to_lowercase();
-                if lower.contains("controlcenter") || lower.contains("gamingcenter") || lower.contains("ccu") {
-                    if data_len > 0 {
-                        let mut updated = data_buf[..data_len as usize].to_vec();
-                        let target_byte = if disable { 0x03 } else { 0x02 };
-                        if updated[0] != target_byte {
-                            updated[0] = target_byte;
-                            to_update.push((val_name, val_type, updated));
-                        }
-                    }
-                }
-                index += 1;
-            }
-
-            for (name, val_type, data) in to_update {
-                let wide_name: Vec<u16> = format!("{}\0", name).encode_utf16().collect();
-                let _ = RegSetValueExW(
-                    hkey,
-                    PCWSTR(wide_name.as_ptr()),
-                    0,
-                    windows::Win32::System::Registry::REG_VALUE_TYPE(val_type),
-                    Some(&data),
-                );
-            }
-
-            let _ = RegCloseKey(hkey);
-        }
+    const SUBKEY: &str = r"SOFTWARE\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\StartupTask";
+    let target_byte = if disable { 0x03 } else { 0x02 };
+    let patched = reg::patch_first_byte_of_matching_values(
+        RegRoot::User,
+        SUBKEY,
+        &["controlcenter", "gamingcenter", "ccu"],
+        target_byte,
+    );
+    if patched > 0 {
+        crate::log_info!(
+            "TAKEOVER_SANDBOX",
+            "StartupApproved: set 0x{:02X} on {} entr{}",
+            target_byte,
+            patched,
+            if patched == 1 { "y" } else { "ies" }
+        );
     }
 }
 
-/// Sweeps and refreshes Windows Shell notification area toolbars to eliminate ghost icons
+/// Sweep ghost icons out of the Windows notification area. Linux has no
+/// equivalent window — StatusNotifierItem hosts re-query items themselves.
 pub fn refresh_tray_notification_area() {
+    #[cfg(windows)]
     unsafe {
+        use windows::core::{w, PCWSTR};
+        use windows::Win32::Foundation::{HWND, LPARAM, RECT, WPARAM};
+        use windows::Win32::UI::WindowsAndMessaging::{
+            FindWindowExW, FindWindowW, GetClientRect, SendMessageW, WM_MOUSEMOVE,
+        };
+
         let refresh_toolbar = |h_toolbar: HWND| {
             if h_toolbar.0.is_null() {
                 return;
@@ -437,14 +315,25 @@ pub fn refresh_tray_notification_area() {
         };
 
         if let Ok(h_tray) = FindWindowW(w!("Shell_TrayWnd"), PCWSTR::null()) {
-            if let Ok(h_notify) = FindWindowExW(h_tray, HWND::default(), w!("TrayNotifyWnd"), PCWSTR::null()) {
-                if let Ok(h_sys_pager) = FindWindowExW(h_notify, HWND::default(), w!("SysPager"), PCWSTR::null()) {
-                    if let Ok(h_tb1) = FindWindowExW(h_sys_pager, HWND::default(), w!("ToolbarWindow32"), PCWSTR::null()) {
+            if let Ok(h_notify) =
+                FindWindowExW(h_tray, HWND::default(), w!("TrayNotifyWnd"), PCWSTR::null())
+            {
+                if let Ok(h_sys_pager) =
+                    FindWindowExW(h_notify, HWND::default(), w!("SysPager"), PCWSTR::null())
+                {
+                    if let Ok(h_tb1) = FindWindowExW(
+                        h_sys_pager,
+                        HWND::default(),
+                        w!("ToolbarWindow32"),
+                        PCWSTR::null(),
+                    ) {
                         refresh_toolbar(h_tb1);
                     }
                 }
                 let mut h_tb_direct = HWND::default();
-                while let Ok(next) = FindWindowExW(h_notify, h_tb_direct, w!("ToolbarWindow32"), PCWSTR::null()) {
+                while let Ok(next) =
+                    FindWindowExW(h_notify, h_tb_direct, w!("ToolbarWindow32"), PCWSTR::null())
+                {
                     if next.0.is_null() {
                         break;
                     }
@@ -456,7 +345,12 @@ pub fn refresh_tray_notification_area() {
 
         if let Ok(h_overflow) = FindWindowW(w!("NotifyIconOverflowWindow"), PCWSTR::null()) {
             let mut h_tb_overflow = HWND::default();
-            while let Ok(next) = FindWindowExW(h_overflow, h_tb_overflow, w!("ToolbarWindow32"), PCWSTR::null()) {
+            while let Ok(next) = FindWindowExW(
+                h_overflow,
+                h_tb_overflow,
+                w!("ToolbarWindow32"),
+                PCWSTR::null(),
+            ) {
                 if next.0.is_null() {
                     break;
                 }
@@ -465,4 +359,10 @@ pub fn refresh_tray_notification_area() {
             }
         }
     }
+
+    #[cfg(target_os = "linux")]
+    crate::log_info!(
+        "TAKEOVER_SANDBOX",
+        "Notification-area sweep is Windows-only; StatusNotifierItem hosts re-query on their own"
+    );
 }

@@ -1,22 +1,42 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+#[cfg(windows)]
 use windows::core::GUID;
+#[cfg(windows)]
 use windows::Devices::Bluetooth::Advertisement::{
     BluetoothLEAdvertisementReceivedEventArgs, BluetoothLEAdvertisementWatcher,
     BluetoothLEScanningMode,
 };
+#[cfg(windows)]
 use windows::Devices::Bluetooth::GenericAttributeProfile::{
     GattCharacteristic, GattClientCharacteristicConfigurationDescriptorValue,
     GattCommunicationStatus, GattDeviceService, GattSharingMode, GattValueChangedEventArgs,
     GattWriteOption, GattSession,
 };
+#[cfg(windows)]
 use windows::Devices::Bluetooth::{BluetoothCacheMode, BluetoothConnectionStatus, BluetoothLEDevice};
+#[cfg(windows)]
 use windows::Storage::Streams::DataWriter;
 use crate::driver::wmi_ec::ADDR_WATER_COOLER_FLAG;
 
+/// Handle used by the connection state machine to speak to the cooler.
+///
+/// On Windows this is the WinRT characteristic; on Linux it will be the BlueZ
+/// object path once the `org.bluez` session lands. The neutral code only ever
+/// stores it in a `Mutex<Option<_>>` and hands it to `write_frame`, so a marker
+/// type keeps every caller compiling.
+#[cfg(windows)]
+pub type ActiveCharacter = GattCharacteristic;
+#[cfg(not(windows))]
+#[derive(Clone, Copy, Debug, Default)]
+pub struct ActiveCharacter;
+
+#[cfg(windows)]
 const NUS_SERVICE_UUID: GUID = GUID::from_u128(0x6e400001_b5a3_f393_e0a9_e50e24dcca9e);
+#[cfg(windows)]
 const NUS_TX_WRITE_UUID: GUID = GUID::from_u128(0x6e400002_b5a3_f393_e0a9_e50e24dcca9e);
+#[cfg(windows)]
 const NUS_RX_NOTIFY_UUID: GUID = GUID::from_u128(0x6e400003_b5a3_f393_e0a9_e50e24dcca9e);
 
 // Default Water Cooler MAC address (0 = auto-scan on first connection)
@@ -33,6 +53,7 @@ pub fn mac_u64_to_str(mac: u64) -> String {
 }
 
 /// Discover all Mechrevo Water Cooler devices registered in Windows paired PnP registry.
+#[cfg(windows)]
 pub fn find_all_paired_water_coolers() -> Vec<(u64, String)> {
     use windows::core::PCWSTR;
     use windows::Win32::System::Registry::{
@@ -242,7 +263,7 @@ pub struct CoolerTelemetry {
 pub struct BleCoolerController {
     state: Arc<WaterCoolerState>,
     mac_address: Arc<AtomicU64>,
-    active_char: Arc<parking_lot::Mutex<Option<GattCharacteristic>>>,
+    active_char: Arc<parking_lot::Mutex<Option<ActiveCharacter>>>,
     supervisor_started: AtomicBool,
     wakeup_notify: Arc<(parking_lot::Mutex<bool>, parking_lot::Condvar)>,
 }
@@ -258,43 +279,54 @@ fn mark_user_cmd_sent() {
     LAST_USER_CMD_MS.store(now, Ordering::SeqCst);
 }
 
-fn write_frame(c: &GattCharacteristic, bytes: &[u8]) -> Result<(), String> {
+fn write_frame(c: &ActiveCharacter, bytes: &[u8]) -> Result<(), String> {
     let _guard = BLE_TX_MUTEX.lock();
     let hex = bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
     crate::log_debug!("BLE_TX", "-> TX [{}]", hex);
 
-    let writer = DataWriter::new().map_err(|e| e.to_string())?;
-    writer.WriteBytes(bytes).map_err(|e| e.to_string())?;
-    let buf = writer.DetachBuffer().map_err(|e| e.to_string())?;
-    let op = c.WriteValueWithOptionAsync(&buf, GattWriteOption::WriteWithoutResponse)
-        .map_err(|e| e.to_string())?;
+    #[cfg(windows)]
+    {
+        let _guard = BLE_TX_MUTEX.lock();
+        let hex = bytes.iter().map(|b| format!("{:02X}", b)).collect::<Vec<_>>().join(" ");
+        let writer = DataWriter::new().map_err(|e| e.to_string())?;
+        writer.WriteBytes(bytes).map_err(|e| e.to_string())?;
+        let buf = writer.DetachBuffer().map_err(|e| e.to_string())?;
+        let op = c
+            .WriteValueWithOptionAsync(&buf, GattWriteOption::WriteWithoutResponse)
+            .map_err(|e| e.to_string())?;
 
-    let op_clone = op.clone();
-    let (tx, rx) = std::sync::mpsc::channel::<Result<GattCommunicationStatus, String>>();
-    std::thread::spawn(move || {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            op_clone.get().map_err(|e| e.to_string())
-        }))
-        .unwrap_or_else(|_| Err("Panic caught during WinRT op.get()".to_string()));
-        let _ = tx.send(result);
-    });
+        let op_clone = op.clone();
+        let (tx, rx) = std::sync::mpsc::channel::<Result<GattCommunicationStatus, String>>();
+        std::thread::spawn(move || {
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
+                op_clone.get().map_err(|e| e.to_string())
+            }))
+            .unwrap_or_else(|_| Err("Panic caught during WinRT op.get()".to_string()));
+            let _ = tx.send(result);
+        });
 
-    let status = match rx.recv_timeout(Duration::from_millis(1500)) {
-        Ok(result) => result?,
-        Err(_timeout) => {
-            crate::log_error!("BLE_TX", "<- TIMEOUT (1500ms) for [{}]", hex);
-            return Err("BLE write timeout (1500ms)".to_string());
+        let status = match rx.recv_timeout(Duration::from_millis(1500)) {
+            Ok(result) => result?,
+            Err(_timeout) => {
+                crate::log_error!("BLE_TX", "<- TIMEOUT (1500ms) for [{}]", hex);
+                return Err("BLE write timeout (1500ms)".to_string());
+            }
+        };
+
+        if status != GattCommunicationStatus::Success {
+            crate::log_error!("BLE_TX", "<- FAILED {:?} for [{}]", status, hex);
+            return Err(format!("Gatt write failed: {:?}", status));
         }
-    };
-
-    if status != GattCommunicationStatus::Success {
-        crate::log_error!("BLE_TX", "<- FAILED {:?} for [{}]", status, hex);
-        return Err(format!("Gatt write failed: {:?}", status));
+        crate::log_debug!("BLE_TX", "<- OK [{}]", hex);
+        // 30ms pacing delay matching official PowerShell script
+        std::thread::sleep(Duration::from_millis(30));
+        Ok(())
     }
-    crate::log_debug!("BLE_TX", "<- OK [{}]", hex);
-    // 30ms pacing delay matching official PowerShell script
-    std::thread::sleep(Duration::from_millis(30));
-    Ok(())
+    #[cfg(not(windows))]
+    {
+        let _ = c;
+        Err("BlueZ GATT write not available on this build".into())
+    }
 }
 
 
@@ -345,6 +377,7 @@ pub fn get_global_cooler() -> Arc<BleCoolerController> {
     }).clone()
 }
 
+#[cfg(windows)]
 pub fn scan_for_water_cooler(timeout: Duration) -> Result<u64, String> {
     crate::log_info!("BLE_COOLER", "Starting BLE Advertisement Watcher to discover Mechrevo Water Cooler...");
     let watcher = BluetoothLEAdvertisementWatcher::new().map_err(|e| e.to_string())?;
@@ -407,6 +440,7 @@ pub fn scan_for_water_cooler(timeout: Duration) -> Result<u64, String> {
 }
 
 /// Scan for all nearby Mechrevo water coolers and merge with Windows PnP paired devices.
+#[cfg(windows)]
 pub fn scan_all_water_coolers(timeout: Duration) -> Result<Vec<WaterCoolerDevice>, String> {
     let watcher = BluetoothLEAdvertisementWatcher::new().map_err(|e| e.to_string())?;
     let _ = watcher.SetScanningMode(BluetoothLEScanningMode::Active);
@@ -1006,6 +1040,7 @@ impl BleCoolerController {
         }
 
         std::thread::spawn(move || {
+            #[cfg(windows)]
             unsafe {
                 use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
                 let _ = CoInitializeEx(None, COINIT_MULTITHREADED);
@@ -1113,6 +1148,7 @@ impl BleCoolerController {
     /// Low-power passive BLE advertisement listener:
     /// Zero RF broadcast transmission, 0% CPU overhead, zero interference with Bluetooth audio/mice.
     /// Wakes up instantly when the physical water cooler powers on and broadcasts advertising packets.
+    #[cfg(windows)]
     fn standby_listen_for_cooler(&self, max_wait: Duration) {
         let target_mac = self.get_mac();
         let watcher_res = BluetoothLEAdvertisementWatcher::new();
@@ -1252,6 +1288,7 @@ impl BleCoolerController {
         crate::log_info!("BLE_COOLER", "Passive BLE Advertisement Watcher stopped, resuming active connection path.");
     }
 
+    #[cfg(windows)]
     fn run_connection_session(&self, prefer_uncached: bool) -> Result<(), String> {
         self.state.connected.store(false, Ordering::SeqCst);
 
@@ -1744,6 +1781,54 @@ impl BleCoolerController {
         } else {
             Ok(())
         }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Linux backend — BlueZ over the system D-Bus.
+//
+// The controller state machine, the pump-tier hysteresis and the curve
+// evaluation above are platform-neutral and stay compiled. What differs is
+// device discovery and the GATT session, which on Windows go through WinRT and
+// on Linux through `org.bluez` (`Adapter1.StartDiscovery`, `Device1.Connected`,
+// `GattService1`/`GattCharacteristic1` for the NUS service). The BlueZ session
+// is the P3 item; until it lands these entry points report a clean "backend not
+// available" instead of pretending to scan, and the supervisor backs off
+// through its normal error path rather than hot-looping.
+// ---------------------------------------------------------------------------
+#[cfg(not(windows))]
+pub fn find_all_paired_water_coolers() -> Vec<(u64, String)> {
+    Vec::new()
+}
+
+#[cfg(not(windows))]
+pub fn scan_for_water_cooler(timeout: Duration) -> Result<u64, String> {
+    let _ = timeout;
+    Err("BlueZ backend not available on this build".into())
+}
+
+#[cfg(not(windows))]
+pub fn scan_all_water_coolers(timeout: Duration) -> Result<Vec<WaterCoolerDevice>, String> {
+    let _ = timeout;
+    Err("BlueZ backend not available on this build".into())
+}
+
+#[cfg(not(windows))]
+impl BleCoolerController {
+    fn standby_listen_for_cooler(&self, max_wait: Duration) {
+        // Park on the wakeup condvar exactly like the Windows path so a user
+        // reconnect request still cuts the wait short.
+        let (lock, cvar) = &*self.wakeup_notify;
+        let mut ready = lock.lock();
+        if !*ready {
+            let _ = cvar.wait_for(&mut ready, max_wait);
+        }
+    }
+
+    fn run_connection_session(&self, prefer_uncached: bool) -> Result<(), String> {
+        let _ = prefer_uncached;
+        self.state.connected.store(false, Ordering::SeqCst);
+        Err("BlueZ backend not available on this build".into())
     }
 }
 

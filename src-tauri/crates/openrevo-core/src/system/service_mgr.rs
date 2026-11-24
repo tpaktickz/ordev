@@ -1,17 +1,18 @@
 //! Service Manager and Driver Installation Subsystem
 //!
-//! Handles UWACPIDriver.sys PnP installation, driver health checks, and static capability registries.
-//! OEM Takeover and Restoration logic has been decoupled into `crate::system::takeover::*`.
-//! Re-exports are maintained here for 100% backward compatibility.
+//! On Windows this installs and heals the Uniwill ACPI KMDF PnP driver through
+//! pnputil and keeps the OEM capability registry entries honest. On Linux the
+//! driver role is filled by the kernel (ec_sys / tongfang-mifs-wmi), so the
+//! staging and pnputil steps simply fail soft and the registry writes fall
+//! through [`crate::pal::reg`]'s no-op backend.
+//!
+//! OEM takeaway/restore logic lives in `crate::system::takeover::*`; the
+//! re-exports below keep the old path working.
 
-use std::os::windows::process::CommandExt;
 use std::path::PathBuf;
-use std::process::Command;
-use windows::core::PCWSTR;
-use windows::Win32::System::Registry::{
-    RegCloseKey, RegCreateKeyExW, RegOpenKeyExW, RegSetValueExW, HKEY, HKEY_LOCAL_MACHINE,
-    KEY_READ, KEY_WRITE, REG_DWORD, REG_OPTION_NON_VOLATILE, REG_SZ,
-};
+
+use crate::pal::process::run_quiet;
+use crate::pal::reg::{self, RegRoot};
 
 pub use crate::system::takeover::{
     disable_scheduled_tasks, enable_scheduled_tasks, find_official_control_center, is_oem_installed,
@@ -19,110 +20,24 @@ pub use crate::system::takeover::{
     ControlCenterLocation, OEM_PROCESSES, OEM_SERVICES, OEM_TASKS,
 };
 
-const CREATE_NO_WINDOW: u32 = 0x08000000;
-
 pub const DRIVER_SYS_BYTES: &[u8] = include_bytes!("../../../../resources/driver/UWACPIDriver.sys");
 pub const DRIVER_INF_BYTES: &[u8] = include_bytes!("../../../../resources/driver/UWACPIDriver.inf");
 pub const DRIVER_CAT_BYTES: &[u8] = include_bytes!("../../../../resources/driver/UWACPIDriver.cat");
 
-fn reg_key_exists(hkey_root: HKEY, subkey: &str) -> bool {
-    let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegOpenKeyExW(
-            hkey_root,
-            PCWSTR(wide_sub.as_ptr()),
-            0,
-            KEY_READ,
-            &mut hkey,
-        )
-        .is_ok()
-        {
-            let _ = RegCloseKey(hkey);
-            true
-        } else {
-            false
-        }
-    }
+fn reg_key_exists(root: RegRoot, subkey: &str) -> bool {
+    reg::key_exists(root, subkey)
 }
 
-fn set_reg_dword(hkey_root: HKEY, subkey: &str, val_name: &str, val: u32) {
-    let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-    let wide_val: Vec<u16> = format!("{}\0", val_name).encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegCreateKeyExW(
-            hkey_root,
-            PCWSTR(wide_sub.as_ptr()),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
-            &mut hkey,
-            None,
-        )
-        .is_ok()
-        {
-            let val_bytes = val.to_ne_bytes();
-            let _ = RegSetValueExW(
-                hkey,
-                PCWSTR(wide_val.as_ptr()),
-                0,
-                REG_DWORD,
-                Some(&val_bytes),
-            );
-            let _ = RegCloseKey(hkey);
-        }
-    }
+fn set_reg_dword(root: RegRoot, subkey: &str, val_name: &str, val: u32) {
+    reg::set_dword_or_create(root, subkey, val_name, val);
 }
 
-fn set_reg_string(hkey_root: HKEY, subkey: &str, val_name: &str, val: &str) {
-    let wide_sub: Vec<u16> = format!("{}\0", subkey).encode_utf16().collect();
-    let wide_val: Vec<u16> = format!("{}\0", val_name).encode_utf16().collect();
-    let wide_data: Vec<u16> = format!("{}\0", val).encode_utf16().collect();
-    let mut hkey = HKEY::default();
-    unsafe {
-        if RegCreateKeyExW(
-            hkey_root,
-            PCWSTR(wide_sub.as_ptr()),
-            0,
-            None,
-            REG_OPTION_NON_VOLATILE,
-            KEY_WRITE,
-            None,
-            &mut hkey,
-            None,
-        )
-        .is_ok()
-        {
-            let u8_slice = std::slice::from_raw_parts(wide_data.as_ptr() as *const u8, wide_data.len() * 2);
-            let _ = RegSetValueExW(
-                hkey,
-                PCWSTR(wide_val.as_ptr()),
-                0,
-                REG_SZ,
-                Some(u8_slice),
-            );
-            let _ = RegCloseKey(hkey);
-        }
-    }
+fn set_reg_string(root: RegRoot, subkey: &str, val_name: &str, val: &str) {
+    reg::set_string(root, subkey, val_name, val);
 }
 
 pub fn run_cmd_captured(program: &str, args: &[&str]) -> (Option<i32>, String, String) {
-    match Command::new(program)
-        .args(args)
-        .creation_flags(CREATE_NO_WINDOW)
-        .output()
-    {
-        Ok(out) => {
-            let code = out.status.code();
-            let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            (code, stdout, stderr)
-        }
-        Err(e) => (None, String::new(), e.to_string()),
-    }
+    run_quiet(program, args)
 }
 
 fn get_driver_staging_dir() -> PathBuf {
@@ -160,10 +75,7 @@ pub fn install_pnp_acpi_driver() -> Result<bool, String> {
 
     crate::log_info!("SERVICE_MGR", "pnputil /add-driver /install finished: code={:?}, stdout={}, stderr={}", code, stdout, stderr);
 
-    let _ = Command::new("pnputil.exe")
-        .args(["/scan-devices"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    let _ = run_quiet("pnputil.exe", &["/scan-devices"]);
 
     let available = crate::driver::wmi_ec::mark_driver_rechecked();
     crate::log_info!("SERVICE_MGR", "PnP driver post-install probe result: available={}", available);
@@ -212,14 +124,14 @@ pub fn ensure_acpi_driver_ready() -> Result<(), String> {
             "CPUPerformanceAndOverClockMenuSupport",
         ];
         for k in static_dwords {
-            set_reg_dword(HKEY_LOCAL_MACHINE, item_support, k, 1);
+            set_reg_dword(RegRoot::Machine, item_support, k, 1);
         }
         let flags = crate::driver::wmi_ec::get_hardware_support_flags();
         if flags.has_water_cooler {
-            set_reg_dword(HKEY_LOCAL_MACHINE, item_support, "LiquidCoolingSupport", 1);
-            set_reg_dword(HKEY_LOCAL_MACHINE, item_support, "LiquidCoolingAutoModeSupport", 1);
+            set_reg_dword(RegRoot::Machine, item_support, "LiquidCoolingSupport", 1);
+            set_reg_dword(RegRoot::Machine, item_support, "LiquidCoolingAutoModeSupport", 1);
         }
-        set_reg_string(HKEY_LOCAL_MACHINE, "SOFTWARE\\OEM\\GamingCenter2\\MyFanTable", "EcVersion", "1.17");
+        set_reg_string(RegRoot::Machine, "SOFTWARE\\OEM\\GamingCenter2\\MyFanTable", "EcVersion", "1.17");
     }
 
     self_heal_oem_registry_pollution();
@@ -233,9 +145,9 @@ pub fn self_heal_oem_registry_pollution() {
     let flags = crate::driver::wmi_ec::get_hardware_support_flags();
     if !flags.has_water_cooler {
         let item_support = "SOFTWARE\\OEM\\GamingCenter2\\ItemSupport";
-        if reg_key_exists(HKEY_LOCAL_MACHINE, item_support) {
-            set_reg_dword(HKEY_LOCAL_MACHINE, item_support, "LiquidCoolingSupport", 0);
-            set_reg_dword(HKEY_LOCAL_MACHINE, item_support, "LiquidCoolingAutoModeSupport", 0);
+        if reg_key_exists(RegRoot::Machine, item_support) {
+            set_reg_dword(RegRoot::Machine, item_support, "LiquidCoolingSupport", 0);
+            set_reg_dword(RegRoot::Machine, item_support, "LiquidCoolingAutoModeSupport", 0);
             crate::log_info!("SERVICE_MGR", "Self-healed OEM registry: cleared ghost water cooler support on air-cooled machine");
         }
     }

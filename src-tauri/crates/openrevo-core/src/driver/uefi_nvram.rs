@@ -3,14 +3,15 @@
 //! Fully compatible with both Mechrevo 40-Series and 50-Series laptops.
 
 use serde::{Deserialize, Serialize};
-use std::ffi::c_void;
 
-const UNIWILL_GUID: &str = "{9F33F85C-13CA-4FD1-9C4A-96217722C593}\0";
-const OEM_MAGIC_VAR_NAME: &str = "OemMagicVariable\0";
-const UNIWILL_VAR_NAME: &str = "UniWillVariable\0";
-const OEM_DOOR_VAR_NAME: &str = "OemMagicDoor\0";
+use crate::pal::firmware;
+
+const OEM_MAGIC_VAR_NAME: &str = "OemMagicVariable";
+const UNIWILL_VAR_NAME: &str = "UniWillVariable";
+const OEM_DOOR_VAR_NAME: &str = "OemMagicDoor";
 #[allow(dead_code)]
-const OEM_DGPU_PRESENT_VAR_NAME: &str = "OemDgpuPresent\0";
+const OEM_DGPU_PRESENT_VAR_NAME: &str = "OemDgpuPresent";
+const UNIWILL_GUID: &str = firmware::UNIWILL_GUID;
 
 // Offsets verified via Official DefaultTool.exe Reflection:
 pub const OFFSET_MEMORY_OC_SWITCH: usize = 51;  // 0x33: MemoryOverClockSwitch (1=enabled, 0=disabled)
@@ -94,115 +95,13 @@ struct TOKEN_PRIVILEGES {
     attributes: u32,
 }
 
-const SE_PRIVILEGE_ENABLED: u32 = 0x00000002;
-const TOKEN_ADJUST_PRIVILEGES: u32 = 0x0020;
-const TOKEN_QUERY: u32 = 0x0008;
-
-extern "system" {
-    fn GetCurrentProcess() -> *mut c_void;
-
-    fn OpenProcessToken(
-        process_handle: *mut c_void,
-        desired_access: u32,
-        token_handle: *mut *mut c_void,
-    ) -> i32;
-
-    fn LookupPrivilegeValueW(
-        system_name: *const u16,
-        name: *const u16,
-        luid: *mut LUID,
-    ) -> i32;
-
-    fn AdjustTokenPrivileges(
-        token_handle: *mut c_void,
-        disable_all_privileges: i32,
-        new_state: *const TOKEN_PRIVILEGES,
-        buffer_length: u32,
-        previous_state: *mut c_void,
-        return_length: *mut u32,
-    ) -> i32;
-
-    fn CloseHandle(handle: *mut c_void) -> i32;
-
-    fn GetFirmwareEnvironmentVariableW(
-        name: *const u16,
-        guid: *const u16,
-        buffer: *mut c_void,
-        size: u32,
-    ) -> u32;
-
-    fn SetFirmwareEnvironmentVariableW(
-        name: *const u16,
-        guid: *const u16,
-        buffer: *const c_void,
-        size: u32,
-    ) -> i32;
-
-    fn GetLastError() -> u32;
-}
-
-fn to_wide(s: &str) -> Vec<u16> {
-    s.encode_utf16().collect()
-}
-
-/// Enable SeSystemEnvironmentPrivilege for current process to access UEFI NVRAM
-fn enable_privilege() -> Result<(), String> {
-    unsafe {
-        let mut token: *mut c_void = std::ptr::null_mut();
-        if OpenProcessToken(GetCurrentProcess(), TOKEN_ADJUST_PRIVILEGES | TOKEN_QUERY, &mut token) == 0 {
-            return Err(format!("OpenProcessToken failed, Win32 Error: {}", GetLastError()));
-        }
-
-        let priv_name = to_wide("SeSystemEnvironmentPrivilege\0");
-        let mut luid = LUID { low_part: 0, high_part: 0 };
-        if LookupPrivilegeValueW(std::ptr::null(), priv_name.as_ptr(), &mut luid) == 0 {
-            CloseHandle(token);
-            return Err(format!("LookupPrivilegeValueW failed, Win32 Error: {}", GetLastError()));
-        }
-
-        let tp = TOKEN_PRIVILEGES {
-            privilege_count: 1,
-            luid,
-            attributes: SE_PRIVILEGE_ENABLED,
-        };
-
-        let res = AdjustTokenPrivileges(token, 0, &tp, std::mem::size_of::<TOKEN_PRIVILEGES>() as u32, std::ptr::null_mut(), std::ptr::null_mut());
-        let err = GetLastError();
-        CloseHandle(token);
-
-        if res == 0 || err == 1300 /* ERROR_NOT_ALL_ASSIGNED */ {
-            return Err(format!("SeSystemEnvironmentPrivilege not held (Run as Administrator required, Win32: {})", err));
-        }
-
-        Ok(())
-    }
-}
-
 /// Detect CPU brand name and platform (Intel vs AMD)
 pub fn get_cpu_info() -> (String, bool) {
-    let mut cpu_name = String::new();
+    // The brand string lives in the registry on Windows and /proc/cpuinfo on
+    // Linux; `firmware::cpu_brand` covers both.
+    let mut cpu_name = firmware::cpu_brand().unwrap_or_default().trim().to_string();
 
-    // 1. Try reading ProcessorNameString from Registry
-    unsafe {
-        use windows::core::PCWSTR;
-        use windows::Win32::System::Registry::{RegCloseKey, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_LOCAL_MACHINE, KEY_READ, REG_SZ};
-
-        let subkey = to_wide("HARDWARE\\DESCRIPTION\\System\\CentralProcessor\\0\0");
-        let mut hkey = HKEY::default();
-        if RegOpenKeyExW(HKEY_LOCAL_MACHINE, PCWSTR(subkey.as_ptr()), 0, KEY_READ, &mut hkey).is_ok() {
-            let val_name = to_wide("ProcessorNameString\0");
-            let mut buf = [0u8; 256];
-            let mut buf_len = buf.len() as u32;
-            let mut val_type = REG_SZ;
-            if RegQueryValueExW(hkey, PCWSTR(val_name.as_ptr()), None, Some(&mut val_type), Some(buf.as_mut_ptr()), Some(&mut buf_len)).is_ok() {
-                let u16_slice = std::slice::from_raw_parts(buf.as_ptr() as *const u16, (buf_len as usize) / 2);
-                cpu_name = String::from_utf16_lossy(u16_slice).trim_matches('\0').trim().to_string();
-            }
-            let _ = RegCloseKey(hkey);
-        }
-    }
-
-    // 2. Fallback to PROCESSOR_IDENTIFIER environment variable
+    // Fallback to PROCESSOR_IDENTIFIER environment variable
     if cpu_name.is_empty() {
         if let Ok(id) = std::env::var("PROCESSOR_IDENTIFIER") {
             cpu_name = id;
@@ -228,117 +127,74 @@ pub struct NvramBuffer {
 /// Automatically probe and read active UEFI NVRAM variable:
 /// Priority 1: OemMagicVariable (Next-Gen 50-Series Blackwell / Intel Core Ultra / AMD Ryzen 9000)
 /// Priority 2: UniWillVariable (40-Series Ada Lovelace / 12-14th Gen Intel / Older AMD)
+///
+/// Both variables are owned by the firmware through efivarfs on Linux and
+/// through `GetFirmwareEnvironmentVariableW` on Windows; the pal layer hides
+/// which of the two it is.
 pub fn read_active_nvram() -> Result<NvramBuffer, String> {
-    enable_privilege()?;
-
-    let guid_w = to_wide(UNIWILL_GUID);
-    let mut buf = vec![0u8; 512];
+    firmware::unlock_privilege()?;
+    let mut last_err = String::from("no firmware variable readable");
 
     // Priority 1: OemMagicVariable (50-Series native)
-    let magic_w = to_wide(OEM_MAGIC_VAR_NAME);
-    let bytes_read = unsafe {
-        GetFirmwareEnvironmentVariableW(
-            magic_w.as_ptr(),
-            guid_w.as_ptr(),
-            buf.as_mut_ptr() as *mut c_void,
-            buf.len() as u32,
-        )
-    };
-
-    if bytes_read > 0 {
-        let ap_version = if bytes_read > OFFSET_AP_VERSION as u32 { buf[OFFSET_AP_VERSION] } else { 0 };
-        return Ok(NvramBuffer {
-            buf,
-            bytes_read,
-            var_name: OEM_MAGIC_VAR_NAME,
-            ap_version,
-            is_50_series: true,
-        });
+    match firmware::read_var(UNIWILL_GUID, OEM_MAGIC_VAR_NAME, 512) {
+        Ok(buf) if !buf.is_empty() => {
+            let bytes_read = buf.len() as u32;
+            let ap_version = if bytes_read > OFFSET_AP_VERSION as u32 { buf[OFFSET_AP_VERSION] } else { 0 };
+            return Ok(NvramBuffer {
+                buf,
+                bytes_read,
+                var_name: OEM_MAGIC_VAR_NAME,
+                ap_version,
+                is_50_series: true,
+            });
+        }
+        Ok(_) => last_err = format!("{OEM_MAGIC_VAR_NAME} is empty"),
+        Err(e) => last_err = format!("{OEM_MAGIC_VAR_NAME}: {e}"),
     }
 
     // Priority 2: UniWillVariable (40-Series legacy)
-    let uni_w = to_wide(UNIWILL_VAR_NAME);
-    let bytes_read = unsafe {
-        GetFirmwareEnvironmentVariableW(
-            uni_w.as_ptr(),
-            guid_w.as_ptr(),
-            buf.as_mut_ptr() as *mut c_void,
-            buf.len() as u32,
-        )
-    };
-
-    if bytes_read > 0 {
-        let ap_version = if bytes_read > OFFSET_AP_VERSION as u32 { buf[OFFSET_AP_VERSION] } else { 0 };
-        let is_50_series = ap_version >= 25;
-        return Ok(NvramBuffer {
-            buf,
-            bytes_read,
-            var_name: UNIWILL_VAR_NAME,
-            ap_version,
-            is_50_series,
-        });
+    match firmware::read_var(UNIWILL_GUID, UNIWILL_VAR_NAME, 512) {
+        Ok(buf) if !buf.is_empty() => {
+            let bytes_read = buf.len() as u32;
+            let ap_version = if bytes_read > OFFSET_AP_VERSION as u32 { buf[OFFSET_AP_VERSION] } else { 0 };
+            let is_50_series = ap_version >= 25;
+            return Ok(NvramBuffer {
+                buf,
+                bytes_read,
+                var_name: UNIWILL_VAR_NAME,
+                ap_version,
+                is_50_series,
+            });
+        }
+        Ok(_) => last_err = format!("{UNIWILL_VAR_NAME} is empty"),
+        Err(e) => last_err = format!("{UNIWILL_VAR_NAME}: {e}"),
     }
 
-    let err = unsafe { GetLastError() };
     Err(format!(
-        "UEFI NVRAM 未找到主板控制变量 (尝试了 OemMagicVariable 与 UniWillVariable, Win32 Error: {})",
-        err
+        "UEFI NVRAM 未找到主板控制变量 (尝试了 OemMagicVariable 与 UniWillVariable) — {last_err}"
     ))
 }
 
 /// Unlock 50-series hardware gatekeeper via OemMagicDoor
 pub fn unlock_magic_door() {
-    let door_w = to_wide(OEM_DOOR_VAR_NAME);
-    let guid_w = to_wide(UNIWILL_GUID);
-    let door_key: [u8; 1] = [0x01];
-    let door_res = unsafe {
-        SetFirmwareEnvironmentVariableW(
-            door_w.as_ptr(),
-            guid_w.as_ptr(),
-            door_key.as_ptr() as *const c_void,
-            1,
-        )
-    };
-    if door_res == 0 {
-        let err = unsafe { GetLastError() };
-        eprintln!("[OpenRevo NVRAM] Warning: OemMagicDoor unlock write returned 0 (Win32: {})", err);
-    } else {
-        println!("[OpenRevo NVRAM] OemMagicDoor unlocked successfully.");
+    match firmware::write_var(UNIWILL_GUID, OEM_DOOR_VAR_NAME, &[0x01]) {
+        Ok(()) => crate::log_info!("NVRAM", "OemMagicDoor unlocked successfully."),
+        Err(e) => crate::log_warn!("NVRAM", "OemMagicDoor unlock write failed: {}", e),
     }
 }
 
 /// Atomically write buffer back to Motherboard SPI Flash NVRAM:
 /// Automatically performs 50-series OemMagicDoor handshake when needed.
 pub fn write_active_nvram(var_name: &str, is_50_series: bool, buf: &[u8]) -> Result<(), String> {
-    enable_privilege()?;
+    firmware::unlock_privilege()?;
 
     // 50-series hardware handshake: Unlock OemMagicDoor before writing
     if is_50_series || var_name == OEM_MAGIC_VAR_NAME {
         unlock_magic_door();
     }
 
-    let var_w = to_wide(var_name);
-    let guid_w = to_wide(UNIWILL_GUID);
-
-    let write_res = unsafe {
-        SetFirmwareEnvironmentVariableW(
-            var_w.as_ptr(),
-            guid_w.as_ptr(),
-            buf.as_ptr() as *const c_void,
-            buf.len() as u32,
-        )
-    };
-
-    if write_res == 0 {
-        let err = unsafe { GetLastError() };
-        return Err(format!(
-            "SetFirmwareEnvironmentVariableW failed to write {} (Win32: {})",
-            var_name.trim_matches('\0'),
-            err
-        ));
-    }
-
-    Ok(())
+    firmware::write_var(UNIWILL_GUID, var_name, buf)
+        .map_err(|e| format!("failed to write {var_name} ({e})"))
 }
 
 /// Read UEFI NVRAM and detect Advanced BIOS Overclocking Menu status (CPU & Memory OC)
@@ -497,65 +353,36 @@ pub fn read_gpu_mode() -> GpuModeHardwareStatus {
     }
 }
 
-/// Gracefully stops NVIDIA container services to release eDP display pipeline handles and avoid MUX lockup
+/// Gracefully stops NVIDIA display services to release eDP pipeline handles and avoid MUX lockup
 pub fn stop_nvidia_services() {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    crate::log_info!("NVIDIA_SVC", "Gracefully stopping NVIDIA container services to release display handles...");
-    let _ = std::process::Command::new("net.exe")
-        .args(["stop", "NVDisplay.ContainerLocalSystem"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
-    let _ = std::process::Command::new("net.exe")
-        .args(["stop", "NVContainerLocalSystem"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    crate::log_info!("NVIDIA_SVC", "Gracefully stopping NVIDIA display services to release display handles...");
+    firmware::stop_gpu_services();
 }
 
-/// Restarts NVIDIA container services after returning to hybrid or dGPU mode
+/// Restarts NVIDIA display services after returning to hybrid or dGPU mode
 pub fn start_nvidia_services() {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    crate::log_info!("NVIDIA_SVC", "Starting NVIDIA container services...");
-    let _ = std::process::Command::new("net.exe")
-        .args(["start", "NVDisplay.ContainerLocalSystem"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
-    let _ = std::process::Command::new("net.exe")
-        .args(["start", "NVContainerLocalSystem"])
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    crate::log_info!("NVIDIA_SVC", "Starting NVIDIA display services...");
+    firmware::start_gpu_services();
 }
 
-/// Triggers PCI bus hardware re-scan so Windows PnP tree refreshes device presence
+/// Triggers a PCI bus hardware re-scan so the device tree refreshes device presence
 pub fn rescan_pci_devices() {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
-    crate::log_info!("PCI_SCAN", "Rescanning PCI devices via pnputil...");
-    let _ = std::process::Command::new("pnputil.exe")
-        .arg("/scan-devices")
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    crate::log_info!("PCI_SCAN", "Rescanning PCI devices...");
+    firmware::rescan_pci();
 }
 
 /// Pre-wakes up iGPU power rails and display stack prior to MUX switch reboot:
 /// In dGPU direct mode, the iGPU is typically in deep D3Cold power-gated state.
 /// If reboot is executed while iGPU is unpowered, BIOS POST MUX handover to iGPU
 /// often fails link training / GOP init, causing a black-screen hang.
-/// This function triggers a PnP display device refresh and ACPI wake-up before OS shutdown.
 pub fn wakeup_igpu_pipeline() {
-    use std::os::windows::process::CommandExt;
-    const CREATE_NO_WINDOW: u32 = 0x08000000;
     crate::log_info!("GPU_WAKE", "Pre-waking up iGPU power rails and scanning display adapters before reboot...");
-    
+
     // 1. Ensure Tongfang ACPI WMI selector is set to hybrid (turn dGPU suppression off / allow iGPU power)
     notify_wmi_igpu_mode(false);
 
-    // 2. Refresh Windows display PnP devices via pnputil
-    let _ = std::process::Command::new("pnputil.exe")
-        .arg("/scan-devices")
-        .creation_flags(CREATE_NO_WINDOW)
-        .status();
+    // 2. Refresh the display device tree
+    firmware::rescan_pci();
 
     // 3. Brief hardware power rail settling time
     std::thread::sleep(std::time::Duration::from_millis(300));
@@ -982,7 +809,7 @@ pub fn write_gpu_mode(target_mode: &str) -> Result<GpuModeHardwareStatus, String
     println!(
         "[OpenRevo NVRAM] Successfully wrote {} bytes to {} (OemDisplayMode: 0x{:02X} -> '{}', CPU: {})",
         nv.bytes_read,
-        nv.var_name.trim_matches('\0'),
+        nv.var_name,
         target_byte,
         target_mode,
         cpu_name
@@ -1036,29 +863,12 @@ pub fn trigger_graceful_reboot(stabilize_delay_ms: u64) -> Result<(), String> {
             // Step 5: Physical bus stabilization delay & allow DWM/Display drivers to cleanly unbind
             std::thread::sleep(std::time::Duration::from_millis(effective_delay));
 
-            use std::os::windows::process::CommandExt;
-            const CREATE_NO_WINDOW: u32 = 0x08000000;
-            // Execute Windows reboot with force flag (/f) and 1s timeout to bypass Fast Startup hangs
-            let res = std::process::Command::new("shutdown.exe")
-                .args(["/r", "/f", "/t", "1"])
-                .creation_flags(CREATE_NO_WINDOW)
-                .status();
-
-            match res {
-                Ok(status) if status.success() => {
-                    crate::log_info!("SYSTEM_REBOOT", "shutdown.exe dispatched successfully. Awaiting OS session termination.");
-                }
-                Ok(status) => {
-                    crate::log_error!("SYSTEM_REBOOT", "shutdown.exe exited with non-zero status: {:?}", status.code());
-                    // Fallback to /t 0 /f if /t 1 was rejected
-                    let _ = std::process::Command::new("shutdown.exe")
-                        .args(["/r", "/f", "/t", "0"])
-                        .creation_flags(CREATE_NO_WINDOW)
-                        .status();
-                }
-                Err(e) => {
-                    crate::log_error!("SYSTEM_REBOOT", "Failed to dispatch shutdown.exe: {}", e);
-                }
+            match firmware::system_reboot() {
+                Ok(()) => crate::log_info!(
+                    "SYSTEM_REBOOT",
+                    "Reboot dispatched successfully. Awaiting OS session termination."
+                ),
+                Err(e) => crate::log_error!("SYSTEM_REBOOT", "Failed to dispatch reboot: {}", e),
             }
         })
         .map_err(|e| format!("Failed to spawn graceful reboot worker: {}", e))?;
@@ -1177,7 +987,7 @@ pub fn write_bios_advanced_menu_status(enable: bool) -> Result<BiosMenuStatus, S
     println!(
         "[OpenRevo NVRAM] Successfully wrote {} bytes to {} (CPU OC: 0x{:02X}, Mem OC: 0x{:02X}, Gen: {})",
         nv.bytes_read,
-        nv.var_name.trim_matches('\0'),
+        nv.var_name,
         if cpu_oc_supported { nv.buf[OFFSET_SWITCH] } else { 0xFF },
         if mem_oc_supported { nv.buf[OFFSET_MEMORY_OC_SWITCH] } else { 0xFF },
         if nv.is_50_series { "50-Series (Door-assisted)" } else { "40-Series (Direct)" }

@@ -3,14 +3,20 @@ use std::time::Duration;
 use slint::{Color, ComponentHandle, RgbaColor};
 pub use slint;
 
+#[cfg(target_os = "windows")]
 use windows::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+#[cfg(target_os = "windows")]
+#[cfg(target_os = "windows")]
 use windows::Win32::Graphics::Dwm::{
     DwmExtendFrameIntoClientArea, DwmSetWindowAttribute, DWMWA_WINDOW_CORNER_PREFERENCE,
     DWMWCP_DONOTROUND,
 };
+#[cfg(target_os = "windows")]
 use windows::Win32::System::Threading::GetCurrentThreadId;
 
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::Controls::MARGINS;
+#[cfg(target_os = "windows")]
 use windows::Win32::UI::WindowsAndMessaging::{
     EnumThreadWindows, GetParent, GetSystemMetrics, GetWindowLongPtrW, GetWindowRect, SetWindowLongPtrW,
     SetWindowPos, SetWindowTextW, ShowWindow, GWL_EXSTYLE, GWL_STYLE, HWND_TOPMOST, SM_CXSCREEN, SM_CYSCREEN,
@@ -58,7 +64,17 @@ pub fn parse_scale_factor(scale_str: &str) -> f32 {
     }
 }
 
-/// Send & Sync wrapper around Windows HWND handle
+/// Window handle. On Windows this is literally `HWND`; on Linux there is no
+/// handle to carry, so an opaque token stands in and every placement call goes
+/// through the Slint window instead.
+#[cfg(target_os = "windows")]
+pub type WinHandle = HWND;
+
+#[cfg(not(target_os = "windows"))]
+#[derive(Debug, Clone, Copy, Default)]
+pub struct WinHandle(pub isize);
+
+/// Send & Sync wrapper around a window handle
 #[derive(Debug, Clone, Copy)]
 pub struct SafeHwnd(pub isize);
 
@@ -66,15 +82,30 @@ unsafe impl Send for SafeHwnd {}
 unsafe impl Sync for SafeHwnd {}
 
 impl SafeHwnd {
-    pub fn from_hwnd(hwnd: HWND) -> Self {
-        Self(hwnd.0 as isize)
+    pub fn from_hwnd(hwnd: WinHandle) -> Self {
+        #[cfg(target_os = "windows")]
+        {
+            Self(hwnd.0 as isize)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            Self(hwnd.0)
+        }
     }
 
-    pub fn as_hwnd(&self) -> HWND {
-        HWND(self.0 as *mut _)
+    pub fn as_hwnd(&self) -> WinHandle {
+        #[cfg(target_os = "windows")]
+        {
+            HWND(self.0 as *mut _)
+        }
+        #[cfg(not(target_os = "windows"))]
+        {
+            WinHandle(self.0)
+        }
     }
 }
 
+#[cfg(target_os = "windows")]
 unsafe extern "system" fn enum_thread_wnd_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
     if let Ok(parent) = GetParent(hwnd) {
         if !parent.0.is_null() {
@@ -98,6 +129,7 @@ unsafe extern "system" fn enum_thread_wnd_proc(hwnd: HWND, lparam: LPARAM) -> BO
     BOOL(1) // Continue enumeration
 }
 
+#[cfg(target_os = "windows")]
 fn find_thread_hwnd() -> Option<HWND> {
     let mut found_hwnd = HWND(std::ptr::null_mut());
     unsafe {
@@ -115,6 +147,7 @@ fn find_thread_hwnd() -> Option<HWND> {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn get_window_dpi_scale(hwnd: HWND) -> f32 {
     #[link(name = "user32")]
     extern "system" {
@@ -128,6 +161,7 @@ fn get_window_dpi_scale(hwnd: HWND) -> f32 {
     }
 }
 
+#[cfg(target_os = "windows")]
 fn get_monitor_bounds(hwnd: HWND) -> (i32, i32, i32, i32) {
     use windows::Win32::Graphics::Gdi::{
         GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
@@ -148,7 +182,7 @@ fn get_monitor_bounds(hwnd: HWND) -> (i32, i32, i32, i32) {
     }
 }
 
-fn calculate_osd_position(hwnd: HWND, position_str: &str, win_width: i32, win_height: i32) -> (i32, i32) {
+fn calculate_osd_position(hwnd: WinHandle, position_str: &str, win_width: i32, win_height: i32) -> (i32, i32) {
     let dpi_scale = get_window_dpi_scale(hwnd);
     let (mon_x, mon_y, screen_w, screen_h) = get_monitor_bounds(hwnd);
 
@@ -171,6 +205,7 @@ fn calculate_osd_position(hwnd: HWND, position_str: &str, win_width: i32, win_he
     (mon_x + rel_x, mon_y + rel_y)
 }
 
+#[cfg(target_os = "windows")]
 fn reposition_osd_window(hwnd: HWND, position_str: &str) {
     unsafe {
         let mut rect = RECT::default();
@@ -191,6 +226,7 @@ fn reposition_osd_window(hwnd: HWND, position_str: &str) {
     }
 }
 
+#[cfg(target_os = "windows")]
 pub fn apply_osd_window_styles(hwnd: HWND, position_str: &str) {
     unsafe {
         // Guarantee window remains hidden while undergoing style mutations
@@ -248,6 +284,111 @@ pub fn apply_osd_window_styles(hwnd: HWND, position_str: &str) {
     }
 }
 
+
+#[cfg(not(target_os = "windows"))]
+fn with_osd_ui<R>(f: impl FnOnce(&OsdWindow) -> R) -> Option<R> {
+    let state = OSD_STATE.get()?;
+    let ui = state.window.upgrade()?;
+    Some(f(&ui))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn find_thread_hwnd() -> Option<WinHandle> {
+    with_osd_ui(|_| ()).map(|_| WinHandle(0))
+}
+
+#[cfg(not(target_os = "windows"))]
+fn get_window_dpi_scale(_hwnd: WinHandle) -> f32 {
+    with_osd_ui(|ui| ui.window().scale_factor())
+        .filter(|s| *s > 0.1)
+        .unwrap_or(1.0)
+}
+
+/// Primary screen extent. Work area is not exposed by a cross-desktop API.
+#[cfg(not(target_os = "windows"))]
+fn get_monitor_bounds(_hwnd: WinHandle) -> (i32, i32, i32, i32) {
+    let mut best = (0i32, 0i32);
+    if let Ok(entries) = std::fs::read_dir("/sys/class/drm") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.join("status").exists() {
+                continue;
+            }
+            if std::fs::read_to_string(path.join("status")).unwrap_or_default().trim() != "connected" {
+                continue;
+            }
+            if let Ok(modes) = std::fs::read_to_string(path.join("modes")) {
+                for line in modes.lines() {
+                    let mut it = line.split('x');
+                    let w = it.next().and_then(|v| v.trim().parse::<i32>().ok()).unwrap_or(0);
+                    let h = it.next().and_then(|v| v.trim().parse::<i32>().ok()).unwrap_or(0);
+                    if w * h > best.0 * best.1 {
+                        best = (w, h);
+                    }
+                }
+            }
+        }
+    }
+    let (w, h) = if best.0 == 0 || best.1 == 0 { (1920, 1080) } else { best };
+    (0, 0, w, h)
+}
+
+/// Wayland compositors may ignore this for tiled surfaces; X11 obeys it.
+#[cfg(not(target_os = "windows"))]
+fn reposition_osd_window(_hwnd: WinHandle, position_str: &str) {
+    let size = with_osd_ui(|ui| ui.window().size()).unwrap_or_default();
+    let (x, y) = calculate_osd_position(
+        WinHandle(0),
+        position_str,
+        size.width as i32,
+        size.height as i32,
+    );
+    let _ = with_osd_ui(|ui| {
+        ui.window()
+            .set_position(slint::PhysicalPosition::new(x.max(0), y.max(0)));
+    });
+}
+
+/// Linux has no DWM/WM styles to mutate: the OSD is a frameless Slint window and
+/// the compositor owns decoration and stacking. Placement is still applied.
+#[cfg(not(target_os = "windows"))]
+pub fn apply_osd_window_styles(hwnd: WinHandle, position_str: &str) {
+    reposition_osd_window(hwnd, position_str);
+    osd_log(&format!("apply_osd_window_styles (linux) at pos={}", position_str));
+}
+
+fn hide_window(hwnd: SafeHwnd) {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        let _ = ShowWindow(hwnd.as_hwnd(), SW_HIDE);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = hwnd;
+        let _ = with_osd_ui(|ui| ui.window().hide());
+    }
+}
+
+fn show_window_no_activate(hwnd: SafeHwnd) {
+    #[cfg(target_os = "windows")]
+    unsafe {
+        let _ = ShowWindow(hwnd.as_hwnd(), SW_SHOWNOACTIVATE);
+        let _ = SetWindowPos(
+            hwnd.as_hwnd(),
+            HWND_TOPMOST,
+            0,
+            0,
+            0,
+            0,
+            SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
+        );
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        let _ = hwnd;
+        let _ = with_osd_ui(|ui| ui.window().show());
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct OsdPalette {
@@ -351,18 +492,7 @@ fn reveal_osd_window(hwnd_opt: Option<SafeHwnd>) {
             .and_then(|s| s.config.lock().ok().map(|c| c.position.clone()))
             .unwrap_or_else(|| "top-left".to_string());
         reposition_osd_window(safe_hwnd.as_hwnd(), &pos);
-        unsafe {
-            let _ = ShowWindow(safe_hwnd.as_hwnd(), SW_SHOWNOACTIVATE);
-            let _ = SetWindowPos(
-                safe_hwnd.as_hwnd(),
-                HWND_TOPMOST,
-                0,
-                0,
-                0,
-                0,
-                SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE,
-            );
-        }
+        show_window_no_activate(safe_hwnd);
         osd_log(&format!("reveal_osd_window: Shown HWND {:?}", safe_hwnd.0));
     } else {
         osd_log("reveal_osd_window: WARNING safe_hwnd is None");
@@ -776,10 +906,8 @@ fn schedule_auto_hide_internal(ui: &OsdWindow, hwnd_shared: Arc<Mutex<Option<Saf
                     return; // Superseded by a newer OSD event, keep shown
                 }
                 if let Some(safe_hwnd) = *hide_hwnd.lock().unwrap() {
-                    unsafe {
-                        let _ = ShowWindow(safe_hwnd.as_hwnd(), SW_HIDE);
-                    }
-                    osd_log("schedule_auto_hide: window hidden via SW_HIDE");
+                    hide_window(safe_hwnd);
+                    osd_log("schedule_auto_hide: window hidden");
                 }
             });
         }
@@ -847,10 +975,8 @@ pub fn run_osd_standalone() {
 
     // Synchronously capture and prime HWND immediately on the main thread
     if let Some(hwnd) = find_thread_hwnd() {
-        unsafe {
-            let _ = ShowWindow(hwnd, SW_HIDE);
-        }
         apply_osd_window_styles(hwnd, &pos);
+        hide_window(SafeHwnd::from_hwnd(hwnd));
         *hwnd_holder.lock().unwrap() = Some(SafeHwnd::from_hwnd(hwnd));
         *applied_once.lock().unwrap() = true;
         osd_log(&format!("Synchronously captured & primed HWND {:?}", hwnd.0));
@@ -882,9 +1008,7 @@ pub fn run_osd_standalone() {
                     }
                     apply_osd_window_styles(hwnd, &pos);
                     *hwnd_setter.lock().unwrap() = Some(SafeHwnd::from_hwnd(hwnd));
-                    unsafe {
-                        let _ = ShowWindow(hwnd, SW_HIDE);
-                    }
+                    hide_window(SafeHwnd::from_hwnd(hwnd));
                     *done = true;
                     osd_log(&format!("apply_osd_window_styles done (fallback initial pos={}, theme={}, scale={}), window primed and hidden", pos, theme, scale));
                 }

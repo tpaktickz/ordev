@@ -11,6 +11,10 @@ pub mod power;
 pub mod power_mode;
 pub mod process;
 pub mod raw_gateway;
+#[cfg(windows)]
+pub mod autostart;
+#[cfg(target_os = "linux")]
+#[path = "autostart_linux.rs"]
 pub mod autostart;
 pub mod display;
 pub mod service_mgr;

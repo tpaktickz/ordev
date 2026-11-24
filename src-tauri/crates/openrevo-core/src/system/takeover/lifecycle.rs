@@ -10,7 +10,7 @@ use std::process::Command;
 use std::time::Instant;
 
 #[cfg(target_os = "windows")]
-use windows::Win32::System::Registry::HKEY_LOCAL_MACHINE;
+use crate::pal::reg::RegRoot;
 
 use super::sandbox::{
     disable_scheduled_tasks, enable_scheduled_tasks, neutralize_run_keys, refresh_tray_notification_area,
@@ -76,7 +76,7 @@ pub fn is_oem_installed() -> bool {
     {
         for svc in OEM_SERVICES {
             let key_path = format!("SYSTEM\\CurrentControlSet\\Services\\{}", svc);
-            if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
+            if reg_key_exists(RegRoot::Machine, &key_path) {
                 return true;
             }
         }
@@ -107,9 +107,9 @@ pub fn pause_oem_services() -> Result<(), String> {
         // 4. Configure services to demand (Start=3) and stop them
         for svc in OEM_SERVICES {
             let key_path = format!(r"SYSTEM\CurrentControlSet\Services\{}", svc);
-            if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
+            if reg_key_exists(RegRoot::Machine, &key_path) {
                 // Set to Demand (3)
-                set_reg_dword(HKEY_LOCAL_MACHINE, &key_path, "Start", 3);
+                set_reg_dword(RegRoot::Machine, &key_path, "Start", 3);
                 let _ = run_cmd_captured("sc.exe", &["config", svc, "start=", "demand"]);
                 let _ = run_cmd_captured("sc.exe", &["stop", svc]);
             }
@@ -166,14 +166,14 @@ pub fn resume_oem_services() -> Result<(), String> {
         // 6. Reconfigure services to Automatic startup (Registry Start=2 + sc.exe config)
         for svc in OEM_SERVICES {
             let key_path = format!(r"SYSTEM\CurrentControlSet\Services\{}", svc);
-            if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
-                set_reg_dword(HKEY_LOCAL_MACHINE, &key_path, "Start", 2);
+            if reg_key_exists(RegRoot::Machine, &key_path) {
+                set_reg_dword(RegRoot::Machine, &key_path, "Start", 2);
                 let _ = run_cmd_captured("sc.exe", &["config", svc, "start=", "auto"]);
             }
         }
 
         // 7. Start primary service (GCUBridge) and track GCUService auto-spawn
-        let gcubridge_installed = reg_key_exists(HKEY_LOCAL_MACHINE, r"SYSTEM\CurrentControlSet\Services\GCUBridge");
+        let gcubridge_installed = reg_key_exists(RegRoot::Machine, r"SYSTEM\CurrentControlSet\Services\GCUBridge");
         let mut gcubridge_active = false;
 
         if gcubridge_installed {
@@ -220,7 +220,7 @@ pub fn resume_oem_services() -> Result<(), String> {
         // Direct fallback: If GCUService was not spawned by GCUBridge, start it explicitly!
         if !gcuservice_active {
             let gcu_key = r"SYSTEM\CurrentControlSet\Services\GCUService";
-            if reg_key_exists(HKEY_LOCAL_MACHINE, gcu_key) {
+            if reg_key_exists(RegRoot::Machine, gcu_key) {
                 let (sc_code, sc_out, sc_err) = run_cmd_captured("sc.exe", &["start", "GCUService"]);
                 crate::log_info!(
                     "TAKEOVER",
@@ -236,7 +236,7 @@ pub fn resume_oem_services() -> Result<(), String> {
         for svc in OEM_SERVICES {
             if *svc != "GCUBridge" && *svc != "GCUService" {
                 let key_path = format!(r"SYSTEM\CurrentControlSet\Services\{}", svc);
-                if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
+                if reg_key_exists(RegRoot::Machine, &key_path) {
                     let _ = run_cmd_captured("sc.exe", &["start", svc]);
                 }
             }
@@ -249,7 +249,7 @@ pub fn resume_oem_services() -> Result<(), String> {
         let tray_tasks = ["ControlCenterTray", "OSDTpDetect", "AiStone", "CCU", "CCU.WinUI"];
         for task in tray_tasks {
             let key_path = format!(r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Schedule\TaskCache\Tree\{}", task);
-            if reg_key_exists(HKEY_LOCAL_MACHINE, &key_path) {
+            if reg_key_exists(RegRoot::Machine, &key_path) {
                 let _ = run_cmd_captured("schtasks.exe", &["/run", "/tn", task]);
             }
         }

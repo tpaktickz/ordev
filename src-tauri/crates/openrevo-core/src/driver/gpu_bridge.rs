@@ -1,4 +1,3 @@
-use std::os::windows::process::CommandExt;
 use std::process::Command;
 use std::sync::atomic::{AtomicI8, AtomicI32, AtomicU32, AtomicU64, Ordering};
 use std::sync::Arc;
@@ -6,7 +5,6 @@ use std::thread;
 use std::time::Duration;
 use parking_lot::{Mutex, RwLock};
 
-const CREATE_NO_WINDOW: u32 = 0x08000000;
 
 /// Fast atomic cache for NVIDIA discrete GPU presence:
 /// -1 = unprobed, 0 = no NVIDIA dGPU (pure iGPU / AMD / Intel Arc), 1 = NVIDIA dGPU present
@@ -34,7 +32,15 @@ pub fn is_nvidia_dgpu_available() -> bool {
     }
     #[cfg(not(windows))]
     {
-        false
+        let is_nv = probe_nvidia_presence_sysfs();
+        HAS_NVIDIA_DGPU.store(if is_nv { 1 } else { 0 }, Ordering::SeqCst);
+        if !is_nv {
+            crate::log_info!(
+                "GPU_BRIDGE",
+                "Non-NVIDIA or pure iGPU laptop: permanently disabled nvidia-smi process queries and poller"
+            );
+        }
+        is_nv
     }
 }
 
@@ -377,8 +383,7 @@ pub fn detect_discrete_gpu() -> Option<(String, u64)> {
     if is_nvidia_dgpu_available() {
         let (tx, rx) = std::sync::mpsc::channel();
         std::thread::spawn(move || {
-            let out = Command::new("nvidia-smi")
-                .creation_flags(CREATE_NO_WINDOW)
+            let out = crate::pal::process::command("nvidia-smi")
                 .args(["--query-gpu=name,memory.total", "--format=csv,noheader,nounits"])
                 .output();
             let _ = tx.send(out);
@@ -578,6 +583,106 @@ pub fn detect_gpu_from_registry() -> Option<(String, u64)> {
     detect_discrete_gpu().or_else(detect_integrated_gpu)
 }
 
+// ---------------------------------------------------------------------------
+// Linux: sysfs PCI enumeration. Registry has no counterpart here, so the vendor
+// and class words from `/sys/bus/pci/devices` stand in for the Win32 lookups.
+// ---------------------------------------------------------------------------
+
+const NV_VENDOR: &str = "0x10de";
+const IGPU_VENDORS: [&str; 2] = ["0x8086", "0x1002"];
+
+#[cfg(not(windows))]
+pub fn probe_nvidia_presence_sysfs() -> bool {
+    scan_pci(&[NV_VENDOR], false).is_some()
+}
+
+#[cfg(not(windows))]
+fn scan_pci(vendors: &[&str], require_boot_vga: bool) -> Option<(String, u64)> {
+    for entry in std::fs::read_dir("/sys/bus/pci/devices").ok()?.flatten() {
+        let path = entry.path();
+        let vendor = std::fs::read_to_string(path.join("vendor"))
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if !vendors.contains(&vendor.as_str()) {
+            continue;
+        }
+        // 0x030000 = VGA controller, 0x030200 = 3D controller (dGPU on a laptop bus).
+        let class = std::fs::read_to_string(path.join("class"))
+            .unwrap_or_default()
+            .trim()
+            .to_string();
+        if !(class.starts_with("0x0300") || class.starts_with("0x0302")) {
+            continue;
+        }
+        if require_boot_vga {
+            let boot = std::fs::read_to_string(path.join("boot_vga")).unwrap_or_default();
+            if boot.trim() != "1" {
+                continue;
+            }
+        }
+        let slot = entry.file_name().to_string_lossy().into_owned();
+        let device = std::fs::read_to_string(path.join("device"))
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        let desc = pci_name(&slot).unwrap_or_else(|| {
+            format!(
+                "PCI {}:{}",
+                vendor.trim_start_matches("0x").to_uppercase(),
+                device.trim_start_matches("0x").to_uppercase()
+            )
+        });
+        return Some((desc, 0));
+    }
+    None
+}
+
+/// Human-readable device name from `lspci -mm`, when pciutils is installed.
+#[cfg(not(windows))]
+fn pci_name(slot: &str) -> Option<String> {
+    let out = crate::pal::process::command("lspci")
+        .args(["-s", slot, "-mm"])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let parts: Vec<&str> = text.split('"').collect();
+    let vendor = parts.get(3)?.trim();
+    let device = parts.get(5)?.trim();
+    if device.is_empty() {
+        return None;
+    }
+    Some(format!("{vendor} {device}"))
+}
+
+#[cfg(not(windows))]
+pub fn detect_dgpu_from_pci_enum() -> Option<(String, u64)> {
+    scan_pci(&[NV_VENDOR], false)
+}
+
+#[cfg(not(windows))]
+pub fn detect_discrete_gpu() -> Option<(String, u64)> {
+    detect_dgpu_from_pci_enum()
+}
+
+#[cfg(not(windows))]
+pub fn detect_igpu_from_pci_enum() -> Option<(String, u64)> {
+    scan_pci(&IGPU_VENDORS, true)
+}
+
+#[cfg(not(windows))]
+pub fn detect_integrated_gpu() -> Option<(String, u64)> {
+    detect_igpu_from_pci_enum()
+}
+
+#[cfg(not(windows))]
+pub fn detect_gpu_from_registry() -> Option<(String, u64)> {
+    detect_discrete_gpu().or_else(detect_integrated_gpu)
+}
+
 fn detect_initial_gpu() -> (String, u64, u16, u16) {
     // 0. 优先走纯 Win32 注册表探测（0 进程、0 锁、0.2ms 极速，不唤醒休眠独显，彻底根除冷启动卡死）
     #[cfg(windows)]
@@ -598,8 +703,7 @@ fn detect_initial_gpu() -> (String, u64, u16, u16) {
 
     let (tx, rx) = std::sync::mpsc::channel();
     std::thread::spawn(move || {
-        let output = Command::new("nvidia-smi")
-            .creation_flags(CREATE_NO_WINDOW)
+        let output = crate::pal::process::command("nvidia-smi")
             .args([
                 "--query-gpu=name,memory.total,power.default_limit,power.max_limit",
                 "--format=csv,noheader,nounits",
@@ -950,8 +1054,7 @@ fn run_legacy_smi_poller(inner: Arc<GpuTelemetryInner>, gpu_name: Arc<Mutex<Stri
         thread::sleep(Duration::from_millis(sleep_ms));
 
         // Execute nvidia-smi with CREATE_NO_WINDOW for real-time telemetry
-        let output = Command::new("nvidia-smi")
-            .creation_flags(CREATE_NO_WINDOW)
+        let output = crate::pal::process::command("nvidia-smi")
             .args([
                 "--query-gpu=name,clocks.current.graphics,clocks.current.memory,temperature.gpu,utilization.gpu,memory.total,memory.used,power.draw",
                 "--format=csv,noheader,nounits",
@@ -1017,14 +1120,11 @@ fn find_nvidia_smi_command() -> Command {
     ];
     for p in standard_paths {
         if std::path::Path::new(p).exists() {
-            let mut cmd = Command::new(p);
-            cmd.creation_flags(CREATE_NO_WINDOW);
-            return cmd;
+            return crate::pal::process::command(p);
         }
     }
-    let mut cmd = Command::new("nvidia-smi");
-    cmd.creation_flags(CREATE_NO_WINDOW);
-    cmd
+    // Linux / non-standard installs: nvidia-smi is on PATH (`nvidia-utils`).
+    crate::pal::process::command("nvidia-smi")
 }
 
 /// Internal direct execution of nvidia-smi power query with raw process execution.
