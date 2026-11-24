@@ -29,14 +29,20 @@ runs:
         fi
         cd "$RUNNER_TEMP"
         rm -rf diag
-        git clone --depth 1 --quiet \
-          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag
+        # Reuse the branch when it exists so one job's force-push does not erase
+        # the other job's log from the same run.
+        if ! git clone --depth 1 --quiet --branch ci-diag \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag 2>/dev/null; then
+          git clone --depth 1 --quiet \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag
+          cd diag
+          git checkout --orphan ci-diag >/dev/null 2>&1 || true
+          git rm -rq --cached . >/dev/null 2>&1 || true
+        fi
         cd diag
-        git checkout --orphan ci-diag >/dev/null 2>&1 || true
-        git rm -rq --cached . >/dev/null 2>&1 || true
         mkdir -p logs
-        cp "$LOG_PATH" "logs/${LOG_NAME}.log"
-        echo "publishing $(wc -l < "logs/${LOG_NAME}.log") lines from $LOG_PATH"
+        cp "$LOG_PATH" "logs/${GITHUB_RUN_ID}-${LOG_NAME}.log"
+        echo "publishing $(wc -l < "logs/${GITHUB_RUN_ID}-${LOG_NAME}.log") lines from $LOG_PATH"
         git add logs
         git -c user.name=ci -c user.email=ci@localhost \
           commit -qm "ci-diag: ${GITHUB_WORKFLOW} ${GITHUB_RUN_ID} failed" || exit 0

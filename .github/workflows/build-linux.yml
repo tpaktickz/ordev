@@ -248,7 +248,9 @@ jobs:
           rm -rf "$TOP"
           mkdir -p "$TOP"/{SOURCES,SPECS,BUILD,BUILDROOT,RPMS,SRPMS}
           git archive --prefix="openrevo-$VER/" -o "$TOP/SOURCES/openrevo-$VER.tar.gz" HEAD
-          rpmbuild -ba \
+          # --nodeps: cargo and rust come from rustup above and are invisible to
+          # rpm's dependency solver, which would otherwise refuse the build.
+          rpmbuild -ba --nodeps \
             --define "_topdir $TOP" \
             --define "version $VER" \
             packaging/rpm/openrevo.spec
