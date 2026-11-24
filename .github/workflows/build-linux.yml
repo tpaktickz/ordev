@@ -74,6 +74,8 @@ jobs:
     name: Build Arch package
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
+    permissions:
+      contents: write
     steps:
       - name: Install build dependencies
         run: |
@@ -95,6 +97,9 @@ jobs:
           CI_SHA: ${{ github.sha }}
         run: |
           set -euxo pipefail
+          # Everything this step prints also lands in a file, because the web log
+          # view cannot be fetched without a token.
+          exec > >(tee /tmp/step.log) 2>&1
           useradd -m -s /bin/bash builder
           # makepkg -s installs makedepends through sudo; without this it stops and
           # asks for a password that nobody is there to type.
@@ -114,6 +119,29 @@ jobs:
               exit "$rc"
             }
           ls -1 ./*.pkg.tar.zst
+
+      # Unauthenticated reads can reach the contents API, so a failing step ships
+      # its own log to a throwaway branch instead of a run artifact.
+      - name: Publish failure log
+        if: failure()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -uo pipefail
+          cd "$RUNNER_TEMP"
+          git clone --depth 1 --quiet \
+            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag
+          cd diag
+          git checkout --orphan ci-diag >/dev/null 2>&1 || true
+          git rm -rq --cached . >/dev/null 2>&1 || true
+          mkdir -p logs
+          cp /tmp/step.log logs/step.log 2>/dev/null || true
+          cp /tmp/makepkg.log logs/makepkg.log 2>/dev/null || true
+          du -h logs/* 2>/dev/null || true
+          git add logs
+          git -c user.name=ci -c user.email=ci@localhost \
+            commit -qm "ci-diag: run ${GITHUB_RUN_ID} failed" || exit 0
+          git push -fq origin ci-diag
 
       - uses: actions/upload-artifact@v4
         with:
