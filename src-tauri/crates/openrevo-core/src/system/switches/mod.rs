@@ -215,6 +215,13 @@ pub fn get_screen_off_unblock_tick() -> u32 {
     SCREEN_OFF_UNBLOCK_TICK.load(std::sync::atomic::Ordering::Relaxed)
 }
 
+/// Ticks (ms) since the last user input, or `None` when the platform has no
+/// global input counter.
+pub use crate::pal::power::last_input_tick;
+
+/// Pin or release the system-wide power lock. See [`crate::pal::power`].
+pub use crate::pal::power::{set_execution_state, ExecutionState};
+
 /// Turn off screen immediately with a 3-second peripheral input grace period.
 /// Suppresses mouse/keyboard wakeup triggers for 3s to let the user move their hand away;
 /// guarantees system execution (CPU & Agent tasks) stays awake overnight without forcing display on

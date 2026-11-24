@@ -177,8 +177,54 @@ pub fn open_file_dialog(filter_name: &str, filter_ext: &str) -> Option<std::path
     None
 }
 
+/// Open dialog on Linux, through the desktop's own XDG chooser.
 #[cfg(not(target_os = "windows"))]
-pub fn open_file_dialog(_filter_name: &str, _filter_ext: &str) -> Option<std::path::PathBuf> {
+pub fn open_file_dialog(filter_name: &str, filter_ext: &str) -> Option<std::path::PathBuf> {
+    let extensions: Vec<&str> = filter_ext.split(';').collect();
+
+    let zenity_filter = format!(
+        "--file-filter={} | {}",
+        filter_name,
+        extensions
+            .iter()
+            .map(|ext| ext.trim_start_matches('*'))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    if let Ok(output) = crate::pal::process::command("zenity")
+        .args(["--file-selection", &zenity_filter])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(std::path::PathBuf::from(path));
+            }
+            return None;
+        }
+    }
+
+    let kdialog_filter = format!(
+        "{} ({})",
+        filter_name,
+        extensions
+            .iter()
+            .map(|ext| if ext.starts_with('*') { ext.to_string() } else { format!("*.{}", ext) })
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    if let Ok(output) = crate::pal::process::command("kdialog")
+        .args(["--getopenfilename", &std::env::var("HOME").unwrap_or_default(), &kdialog_filter])
+        .output()
+    {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(std::path::PathBuf::from(path));
+            }
+        }
+    }
+
     None
 }
 

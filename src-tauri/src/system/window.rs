@@ -345,9 +345,10 @@ pub fn create_main_webview_window(app: &tauri::AppHandle) -> Option<WebviewWindo
         .fullscreen(false)
         .decorations(false)
         .transparent(true)
-        .shadow(true)
-        .drag_and_drop(false)
-        .visible(false);
+        .shadow(true);
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(false);
+    let builder = builder.visible(false);
 
     match builder.build() {
         Ok(win) => {
@@ -579,9 +580,7 @@ pub fn handle_window_event(window: &Window, event: &WindowEvent) {
                         }
 
                         // 7. Win32 HWND resolution
-                        let win_hwnd = win.app_handle().get_webview_window(win.label())
-                            .and_then(|w| w.hwnd().ok())
-                            .map(|h| h.0 as isize);
+                        let win_hwnd = crate::pal::window::native_handle(win.app_handle(), win.label());
 
                         // 8. Win32 foreground check: If foreground window belongs to current process, cancel collapse
                         if is_foreground_belonging_to_current_app(win_hwnd) {

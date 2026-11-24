@@ -5,18 +5,24 @@
 // and queries Uniwill / Aistone OEM cloud calibration servers to retrieve factory ICC/ICM profiles.
 
 use serde::{Deserialize, Serialize};
-use std::ffi::{c_void, CString};
+#[cfg(windows)]
+use std::ffi::CString;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
+#[cfg(windows)]
 use windows::core::{w, PCSTR, PCWSTR};
+#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{
     EnumDisplayDevicesA, DISPLAY_DEVICEA, DISPLAY_DEVICE_ATTACHED_TO_DESKTOP,
 };
+#[cfg(windows)]
 use windows::Win32::System::Registry::{
     RegCloseKey, RegEnumKeyExW, RegOpenKeyExW, RegQueryValueExW, HKEY, HKEY_LOCAL_MACHINE,
     KEY_READ, REG_BINARY, REG_SZ,
 };
+#[cfg(windows)]
+use std::ffi::c_void;
 
 pub const SERVER_UNIWILL: &str = "http://iccprofile.uniwill.com.tw/api/iccprofile/";
 pub const SERVER_AISTONE: &str = "http://iccprofile.aistoneglobal.com:8001/api/iccprofile/";
@@ -66,6 +72,7 @@ pub struct CloudIccFetchHit {
 // Win32 IP Helper API: Query Physical MAC Addresses without PowerShell (0ms)
 // ----------------------------------------------------------------------------
 
+#[cfg(windows)]
 #[repr(C)]
 struct IpAdapterAddressesLh {
     length: u32,
@@ -87,6 +94,7 @@ struct IpAdapterAddressesLh {
     oper_status: u32,
 }
 
+#[cfg(windows)]
 #[link(name = "iphlpapi")]
 extern "system" {
     fn GetAdaptersAddresses(
@@ -98,6 +106,7 @@ extern "system" {
     ) -> u32;
 }
 
+#[cfg(windows)]
 pub fn get_physical_mac_addresses() -> Vec<String> {
     let mut macs = Vec::new();
     let mut buf_len = 0u32;
@@ -144,6 +153,7 @@ pub fn get_physical_mac_addresses() -> Vec<String> {
 // Win32 Registry API: Read BIOS Serial Number (0ms)
 // ----------------------------------------------------------------------------
 
+#[cfg(windows)]
 pub fn get_bios_serial_number() -> String {
     let read_reg = |sub: PCWSTR, val: PCWSTR| -> Option<String> {
         unsafe {
@@ -187,6 +197,7 @@ pub fn get_bios_serial_number() -> String {
 // Win32 EDID Parser: Read Panel Serial Number from Registry EDID (0ms)
 // ----------------------------------------------------------------------------
 
+#[cfg(windows)]
 fn get_edid_serial_number(pnp: &str) -> Option<String> {
     unsafe {
         let pnp_w: Vec<u16> = format!("SYSTEM\\CurrentControlSet\\Enum\\DISPLAY\\{}\0", pnp)
@@ -257,12 +268,14 @@ fn get_edid_serial_number(pnp: &str) -> Option<String> {
     }
 }
 
+#[cfg(windows)]
 fn cstr_to_string(bytes: &[i8]) -> String {
     let u8_slice = unsafe { std::slice::from_raw_parts(bytes.as_ptr() as *const u8, bytes.len()) };
     let len = u8_slice.iter().position(|&c| c == 0).unwrap_or(u8_slice.len());
     String::from_utf8_lossy(&u8_slice[..len]).trim().to_string()
 }
 
+#[cfg(windows)]
 pub fn get_monitors_for_cloud_icc() -> Vec<CloudIccMonitorInfo> {
     let mut list = Vec::new();
     unsafe {
@@ -317,6 +330,167 @@ pub fn get_monitors_for_cloud_icc() -> Vec<CloudIccMonitorInfo> {
             adapter.cb = std::mem::size_of::<DISPLAY_DEVICEA>() as u32;
             dev_num += 1;
         }
+    }
+    list
+}
+
+// ----------------------------------------------------------------------------
+// Linux sources: sysfs/DMI/DRM instead of IP Helper, the registry and GDI
+// ----------------------------------------------------------------------------
+
+/// Physical MAC addresses, upper-case, no separators.
+///
+/// Only real link-layer devices: `lo` and the common virtual prefixes are
+/// skipped, and the Uniwill servers key on physical NICs.
+#[cfg(not(windows))]
+pub fn get_physical_mac_addresses() -> Vec<String> {
+    let mut macs = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/net") else {
+        return macs;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .collect();
+    names.sort();
+    for name in names {
+        if name == "lo"
+            || name.starts_with("docker")
+            || name.starts_with("veth")
+            || name.starts_with("virbr")
+            || name.starts_with("br-")
+        {
+            continue;
+        }
+        let Ok(addr) = fs::read_to_string(format!("/sys/class/net/{}/address", name)) else {
+            continue;
+        };
+        let hex: String = addr.trim().replace(':', "").to_uppercase();
+        if hex.len() == 12 && hex != "000000000000" && !macs.contains(&hex) {
+            macs.push(hex);
+        }
+    }
+    macs
+}
+
+/// BIOS serial number from DMI.
+#[cfg(not(windows))]
+pub fn get_bios_serial_number() -> String {
+    for path in [
+        "/sys/class/dmi/id/board_serial",
+        "/sys/class/dmi/id/product_serial",
+    ] {
+        let Ok(raw) = fs::read_to_string(path) else {
+            continue;
+        };
+        let trimmed = raw.trim();
+        if !trimmed.is_empty() && trimmed != "None" && trimmed != "Default string" && trimmed != "Standard" {
+            return trimmed.to_string();
+        }
+    }
+    String::new()
+}
+
+/// Manufacturer PnP ID (three letters, e.g. `BOE`) encoded in EDID bytes 8..10.
+#[cfg(not(windows))]
+fn edid_pnp(edid: &[u8]) -> Option<String> {
+    if edid.len() < 16 {
+        return None;
+    }
+    let word = ((edid[8] as u16) << 8) | edid[9] as u16;
+    let mut out = String::with_capacity(3);
+    for shift in [10u16, 5, 0] {
+        let value = ((word >> shift) & 0x1f) as u8;
+        if !(1..=26).contains(&value) {
+            return None;
+        }
+        out.push((b'A' + value - 1) as char);
+    }
+    Some(out)
+}
+
+/// Panel serial number for the panel whose EDID carries `pnp`.
+///
+/// The 32-bit serial lives at EDID offset 0x0C; when a vendor ships the serial
+/// as a text descriptor (0xFF) that is used instead.
+#[cfg(not(windows))]
+fn get_edid_serial_number(pnp: &str) -> Option<String> {
+    for (connector, edid) in read_all_edids() {
+        if edid_pnp(&edid).as_deref() != Some(pnp) {
+            continue;
+        }
+        let numeric = u32::from_le_bytes([edid[12], edid[13], edid[14], edid[15]]);
+        if numeric != 0 {
+            return Some(format!("{:08X}", numeric));
+        }
+        for offset in (0..edid.len().saturating_sub(4)).step_by(18) {
+            if edid[offset..offset + 4] == [0x00, 0x00, 0x00, 0xFF] {
+                let text: String = edid[offset + 5..offset + 18]
+                    .iter()
+                    .take_while(|&&b| b != 0x0A && b != 0)
+                    .map(|&b| b as char)
+                    .collect();
+                let text = text.trim().to_string();
+                if !text.is_empty() {
+                    return Some(text);
+                }
+            }
+        }
+        log_debug_sample(&connector);
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn log_debug_sample(connector: &str) {
+    crate::log_debug!("CLOUD_ICC", "Panel {} has no serial descriptor", connector);
+}
+
+#[cfg(not(windows))]
+fn read_all_edids() -> Vec<(String, Vec<u8>)> {
+    let mut out = Vec::new();
+    let Ok(entries) = fs::read_dir("/sys/class/drm") else {
+        return out;
+    };
+    let mut names: Vec<String> = entries
+        .flatten()
+        .map(|e| e.file_name().to_string_lossy().to_string())
+        .filter(|n| n.contains('-'))
+        .collect();
+    names.sort();
+    for name in names {
+        let dir = format!("/sys/class/drm/{}", name);
+        if fs::read_to_string(format!("{}/status", dir))
+            .map(|s| s.trim() != "connected")
+            .unwrap_or(true)
+        {
+            continue;
+        }
+        if let Ok(edid) = fs::read(format!("{}/edid", dir)) {
+            if edid.len() >= 128 {
+                out.push((name, edid));
+            }
+        }
+    }
+    out
+}
+
+#[cfg(not(windows))]
+pub fn get_monitors_for_cloud_icc() -> Vec<CloudIccMonitorInfo> {
+    let mut list = Vec::new();
+    for (connector, edid) in read_all_edids() {
+        let Some(pnp) = edid_pnp(&edid) else {
+            continue;
+        };
+        let is_internal = connector.contains("eDP") || connector.contains("LVDS") || list.is_empty();
+        let panel_serial = get_edid_serial_number(&pnp).unwrap_or_default();
+        list.push(CloudIccMonitorInfo {
+            pnp,
+            panel_serial,
+            friendly_name: connector.clone(),
+            instance_name: connector,
+            is_internal,
+        });
     }
     list
 }
@@ -391,27 +565,31 @@ pub fn get_cloud_icc_identity() -> Result<CloudIccIdentity, String> {
     })
 }
 
-/// Unpack archive via native Windows tar.exe (Pure Win32, Zero PowerShell)
+/// Unpack a retrieved archive.
+///
+/// No zip crate in the tree: shell out, preferring `bsdtar` (libarchive handles
+/// both zip and 7z) and falling back to `unzip`.
 fn unpack_zip_native(archive: &Path, dest: &Path) -> Result<(), String> {
-    #[cfg(target_os = "windows")]
-    {
-        use std::os::windows::process::CommandExt;
-        const CREATE_NO_WINDOW: u32 = 0x08000000;
+    let archive = archive.to_string_lossy().to_string();
+    let dest = dest.to_string_lossy().to_string();
 
-        let tar_res = std::process::Command::new("tar.exe")
-            .args(&["-xf", &archive.to_string_lossy(), "-C", &dest.to_string_lossy()])
-            .creation_flags(CREATE_NO_WINDOW)
-            .status();
+    #[cfg(windows)]
+    let candidates: [(&str, Vec<&str>); 1] = [("tar.exe", vec!["-xf", &archive, "-C", &dest])];
+    #[cfg(not(windows))]
+    let candidates: [(&str, Vec<&str>); 2] = [
+        ("bsdtar", vec!["-xf", &archive, "-C", &dest]),
+        ("unzip", vec!["-o", "-q", &archive, "-d", &dest]),
+    ];
 
-        if let Ok(status) = tar_res {
-            if status.success() {
-                return Ok(());
-            }
+    let mut last_err = String::from("no archive tool available");
+    for (program, args) in candidates {
+        match crate::pal::process::command(program).args(&args).status() {
+            Ok(status) if status.success() => return Ok(()),
+            Ok(status) => last_err = format!("{} exited with {}", program, status),
+            Err(err) => last_err = format!("{}: {}", program, err),
         }
-        Err("tar.exe failed to expand archive".into())
     }
-    #[cfg(not(target_os = "windows"))]
-    Err("Unpack zip only supported on Windows".into())
+    Err(last_err)
 }
 
 /// Collect all .icm and .icc files recursively from a directory

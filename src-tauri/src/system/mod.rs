@@ -8,7 +8,9 @@ pub mod service_mgr;
 pub mod device_switches;
 pub mod switches;
 pub mod cpu_monitor;
-pub mod power_listener;
+pub mod power_events;
+
+pub use power_events as power_listener;
 pub mod power_mode;
 pub mod power;
 pub mod logger;

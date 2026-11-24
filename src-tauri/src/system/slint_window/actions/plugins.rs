@@ -461,9 +461,8 @@ pub fn handle(action: &str, val: &serde_json::Value, app: Option<&AppHandle>) ->
                         });
                     }
                 } else {
-                    let parent_hwnd_raw = super::super::dialog::get_openrevo_main_hwnd();
-                    if parent_hwnd_raw != 0 {
-                        let parent_hwnd = windows::Win32::Foundation::HWND(parent_hwnd_raw as *mut _);
+                    if let Some(parent_hwnd) = super::super::webview_dock::parent_handle() {
+                        let parent_hwnd_raw = super::super::webview_dock::handle_raw(parent_hwnd);
                         let (target_x, target_y, target_w, target_h, _) = super::super::webview_dock::calc_embedded_geometry(parent_hwnd);
 
                         if is_slint_tab(pid) {

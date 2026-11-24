@@ -10,6 +10,8 @@
 pub mod display_color;
 pub mod ec;
 pub mod firmware;
+pub mod input;
+pub mod power;
 pub mod process;
 pub mod reg;
 pub mod xdg;
@@ -44,4 +46,3 @@ pub const fn tag() -> &'static str {
         PlatformKind::Other => "other",
     }
 }
-pub mod input;

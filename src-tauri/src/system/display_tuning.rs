@@ -5,9 +5,12 @@ use std::fs;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::OnceLock;
+#[cfg(windows)]
 use windows::Win32::Foundation::HWND;
+#[cfg(windows)]
 use windows::Win32::Graphics::Gdi::{GetDC, ReleaseDC, HDC};
 
+#[cfg(windows)]
 #[link(name = "gdi32")]
 extern "system" {
     fn SetDeviceGammaRamp(hdc: HDC, lp_ramp: *const std::ffi::c_void) -> windows::Win32::Foundation::BOOL;
@@ -95,6 +98,7 @@ pub struct DisplayTuningState {
     pub factory_presets: Vec<DisplayColorPreset>,
 }
 
+#[allow(dead_code)]
 #[repr(C)]
 struct GammaRamp {
     red: [u16; 256],
@@ -102,19 +106,26 @@ struct GammaRamp {
     blue: [u16; 256],
 }
 
+#[cfg(windows)]
 #[repr(C)]
 struct MagColorEffect {
     transform: [f32; 25],
 }
 
+#[cfg(windows)]
 type MagInitFn = unsafe extern "system" fn() -> windows::Win32::Foundation::BOOL;
+#[cfg(windows)]
 type MagUninitFn = unsafe extern "system" fn() -> windows::Win32::Foundation::BOOL;
+#[cfg(windows)]
 type MagSetEffectFn = unsafe extern "system" fn(*const MagColorEffect) -> windows::Win32::Foundation::BOOL;
 
+#[cfg(windows)]
 static MAG_INITIALIZED: AtomicBool = AtomicBool::new(false);
+#[cfg(windows)]
 static MAG_LIB: OnceLock<Option<libloading::Library>> = OnceLock::new();
 static ENGINE_LOCK: Mutex<()> = Mutex::new(());
 
+#[cfg(windows)]
 fn get_mag_lib() -> Option<&'static libloading::Library> {
     MAG_LIB.get_or_init(|| unsafe {
         libloading::Library::new("Magnification.dll").ok()
@@ -226,16 +237,60 @@ pub fn apply_gamma_ramp(preset: &DisplayColorPreset) {
         ramp.blue[i] = build_channel(x, final_b);
     }
 
+    apply_ramp_to_default_device(&ramp);
+}
+
+/// Apply a raw ramp when no per-device path was available.
+#[cfg(windows)]
+fn apply_ramp_to_default_device(ramp: &GammaRamp) {
     unsafe {
         let hdc: HDC = GetDC(HWND::default());
         if !hdc.0.is_null() {
-            let _ = SetDeviceGammaRamp(hdc, &ramp as *const _ as *const _);
+            let _ = SetDeviceGammaRamp(hdc, ramp as *const _ as *const _);
             let _ = ReleaseDC(HWND::default(), hdc);
         }
     }
 }
 
+/// Apply a raw ramp when no per-device path was available.
+///
+/// Wayland gives no drawable to hand to GDI, so this writes the DRM connector's
+/// `gamma` blob directly — the same interface `color_calibration` uses per device.
+#[cfg(not(windows))]
+fn apply_ramp_to_default_device(ramp: &GammaRamp) {
+    use std::io::Write;
+
+    let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.contains('-') {
+            continue; // skip card0 on its own
+        }
+        let status = std::fs::read_to_string(path.join("status")).unwrap_or_default();
+        if status.trim() != "connected" {
+            continue;
+        }
+        let gamma_path = path.join("gamma");
+        let Ok(mut file) = std::fs::OpenOptions::new().write(true).open(&gamma_path) else {
+            continue;
+        };
+        let mut bytes = Vec::with_capacity(3 * 256 * 2);
+        for channel in [&ramp.red, &ramp.green, &ramp.blue] {
+            for value in channel {
+                bytes.extend_from_slice(&value.to_le_bytes());
+            }
+        }
+        if file.write_all(&bytes).is_ok() {
+            return;
+        }
+    }
+}
+
 /// Apply full 5x5 color transform matrix via Magnification.dll (DWM GPU compositor)
+#[cfg(windows)]
 pub fn apply_color_matrix(preset: &DisplayColorPreset) -> Result<(), String> {
     let lib = get_mag_lib().ok_or_else(|| "Failed to load Magnification.dll".to_string())?;
 
@@ -303,6 +358,33 @@ pub fn apply_color_matrix(preset: &DisplayColorPreset) -> Result<(), String> {
     Ok(())
 }
 
+/// Apply the colour transform on Linux.
+///
+/// Windows hands the 5x5 matrix to DWM through `Magnification.dll`, which is a
+/// compositor-level effect. Wayland exposes no compositor colour pipeline to
+/// applications, so the gamma ramp written by [`apply_gamma_ramp`] carries the
+/// whole transform and the only term that cannot survive a per-channel LUT —
+/// saturation, which is cross-channel — is dropped. Everything else (white
+/// point, per-channel gain, contrast, gamma) reaches the ramp exactly.
+#[cfg(not(windows))]
+pub fn apply_color_matrix(preset: &DisplayColorPreset) -> Result<(), String> {
+    if (preset.saturation - 1.0).abs() > 0.001 {
+        log_once_saturation_unsupported();
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn log_once_saturation_unsupported() {
+    static WARNED: AtomicBool = AtomicBool::new(false);
+    if !WARNED.swap(true, Ordering::SeqCst) {
+        crate::log_info!(
+            "DISPLAY",
+            "Saturation needs a compositor colour pipeline; applied through the gamma ramp approximation only"
+        );
+    }
+}
+
 /// Reset display tuning back to active ICC calibration (or 100% linear default if none)
 pub fn reset_display_tuning_to_default() {
     let _lock = ENGINE_LOCK.lock();
@@ -319,33 +401,30 @@ pub fn reset_display_tuning_to_default() {
             linear_ramp.green[i] = val;
             linear_ramp.blue[i] = val;
         }
-        unsafe {
-            let hdc = GetDC(HWND::default());
-            if !hdc.0.is_null() {
-                let _ = SetDeviceGammaRamp(hdc, &linear_ramp as *const _ as *const _);
-                let _ = ReleaseDC(HWND::default(), hdc);
-            }
-        }
+        apply_ramp_to_default_device(&linear_ramp);
     }
 
     // 2. Restore 5x5 identity matrix
-    let mut identity = MagColorEffect {
-        transform: [0.0; 25],
-    };
-    identity.transform[0] = 1.0;
-    identity.transform[6] = 1.0;
-    identity.transform[12] = 1.0;
-    identity.transform[18] = 1.0;
-    identity.transform[24] = 1.0;
+    #[cfg(windows)]
+    {
+        let mut identity = MagColorEffect {
+            transform: [0.0; 25],
+        };
+        identity.transform[0] = 1.0;
+        identity.transform[6] = 1.0;
+        identity.transform[12] = 1.0;
+        identity.transform[18] = 1.0;
+        identity.transform[24] = 1.0;
 
-    if let Some(lib) = get_mag_lib() {
-        unsafe {
-            if let Ok(set_effect) = lib.get::<MagSetEffectFn>(b"MagSetFullscreenColorEffect\0") {
-                let _ = set_effect(&identity);
-            }
-            if MAG_INITIALIZED.swap(false, Ordering::SeqCst) {
-                if let Ok(uninit) = lib.get::<MagUninitFn>(b"MagUninitialize\0") {
-                    let _ = uninit();
+        if let Some(lib) = get_mag_lib() {
+            unsafe {
+                if let Ok(set_effect) = lib.get::<MagSetEffectFn>(b"MagSetFullscreenColorEffect\0") {
+                    let _ = set_effect(&identity);
+                }
+                if MAG_INITIALIZED.swap(false, Ordering::SeqCst) {
+                    if let Ok(uninit) = lib.get::<MagUninitFn>(b"MagUninitialize\0") {
+                        let _ = uninit();
+                    }
                 }
             }
         }

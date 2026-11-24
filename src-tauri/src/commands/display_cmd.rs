@@ -276,6 +276,7 @@ pub async fn get_miniled_support() -> Result<bool, String> {
     .map_err(|e| e.to_string())?
 }
 
+#[cfg(windows)]
 fn read_oem_miniled_registry() -> Option<bool> {
     unsafe {
         use windows::Win32::System::Registry::{
@@ -313,6 +314,16 @@ fn read_oem_miniled_registry() -> Option<bool> {
     None
 }
 
+/// Mini-LED state as the OEM tool recorded it.
+///
+/// `GamingCenter2`'s registry mirror does not exist on Linux; the EC fields the
+/// caller reads first are authoritative there.
+#[cfg(not(windows))]
+fn read_oem_miniled_registry() -> Option<bool> {
+    None
+}
+
+#[cfg(windows)]
 fn write_oem_miniled_registry(enabled: bool) {
     unsafe {
         use windows::Win32::System::Registry::{
@@ -344,6 +355,16 @@ fn write_oem_miniled_registry(enabled: bool) {
             }
         }
     }
+}
+
+/// Mirror the state into the OEM tool's registry key so both agree.
+#[cfg(not(windows))]
+fn write_oem_miniled_registry(enabled: bool) {
+    crate::log_debug!(
+        "MINILED",
+        "State {} lives in the EC only on this build; no OEM registry mirror",
+        enabled
+    );
 }
 
 #[tauri::command]

@@ -885,6 +885,100 @@ pub fn save_file_dialog(default_name: &str, filter_name: &str, filter_ext: &str)
     }
 }
 
+/// Save dialog on Linux.
+///
+/// The Win32 common dialog has no equivalent that works across desktops, so this
+/// drives the desktop's own XDG chooser through the two portable helpers:
+/// `zenity` (GTK, theme-aware under both desktops) and `kdialog`. The filter
+/// string uses the project's `name;*.ext;*.ext2` form and is split for both.
+#[cfg(not(target_os = "windows"))]
+pub fn save_file_dialog(
+    default_name: &str,
+    filter_name: &str,
+    filter_ext: &str,
+) -> Option<std::path::PathBuf> {
+    use std::sync::atomic::Ordering;
+
+    if crate::system::slint_window::IS_FILE_DIALOG_ACTIVE
+        .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+        .is_err()
+    {
+        crate::log_warn!(
+            "DIALOG",
+            "File dialog is already active; ignoring duplicate invocation"
+        );
+        return None;
+    }
+
+    struct DialogGuard;
+    impl Drop for DialogGuard {
+        fn drop(&mut self) {
+            crate::system::slint_window::IS_FILE_DIALOG_ACTIVE.store(false, Ordering::SeqCst);
+        }
+    }
+    let _guard = DialogGuard;
+
+    let extensions: Vec<&str> = filter_ext.split(';').collect();
+
+    // zenity: `--file-filter=<name> | *.ext1 *.ext2`
+    let zenity_filter = format!(
+        "--file-filter={} | {}",
+        filter_name,
+        extensions
+            .iter()
+            .map(|ext| ext.trim_start_matches('*'))
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    let zenity = crate::pal::process::command("zenity")
+        .args([
+            "--file-selection",
+            "--save",
+            "--confirm-overwrite",
+            &format!("--filename={}", default_name),
+            &zenity_filter,
+        ])
+        .output();
+    if let Ok(output) = zenity {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(std::path::PathBuf::from(path));
+            }
+            return None;
+        }
+    }
+
+    // kdialog: `filter_name (*.ext1 *.ext2)`
+    let kdialog_filter = format!(
+        "{} ({})",
+        filter_name,
+        extensions
+            .iter()
+            .map(|ext| if ext.starts_with('*') { ext.to_string() } else { format!("*.{}", ext) })
+            .collect::<Vec<_>>()
+            .join(" ")
+    );
+    let start_dir = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    let kdialog = crate::pal::process::command("kdialog")
+        .args([
+            "--getsavefilename",
+            &format!("{}/{}", start_dir, default_name),
+            &kdialog_filter,
+        ])
+        .output();
+    if let Ok(output) = kdialog {
+        if output.status.success() {
+            let path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !path.is_empty() {
+                return Some(std::path::PathBuf::from(path));
+            }
+        }
+    }
+
+    None
+}
+
 #[tauri::command]
 pub fn export_profile_preset(id: String) -> Result<Option<String>, String> {
     let profiles = crate::system::config::list_profiles();

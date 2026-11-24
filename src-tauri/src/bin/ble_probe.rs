@@ -1,9 +1,13 @@
+#[cfg(windows)]
 use windows::core::GUID;
+#[cfg(windows)]
 use windows::Devices::Bluetooth::{BluetoothCacheMode, BluetoothLEDevice};
 
+#[cfg(windows)]
 const NUS_SERVICE_UUID: GUID = GUID::from_u128(0x6e400001_b5a3_f393_e0a9_e50e24dcca9e);
 const WATER_COOLER_MAC: u64 = 0xcacbc3029718;
 
+#[cfg(windows)]
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("=== OpenRevo Native BLE Water Cooler Probe ===");
     println!("Resolving device CA:CB:C3:02:97:18...");
@@ -42,4 +46,13 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     Ok(())
+}
+
+/// The probe drives the WinRT GATT stack directly; the BlueZ backend is not
+/// wired into it yet, so this build just reports that.
+#[cfg(not(windows))]
+fn main() {
+    println!("=== OpenRevo BLE Water Cooler Probe ===");
+    println!("This build has no WinRT GATT client; the BlueZ backend is a P3 item.");
+    println!("Target device: CA:CB:C3:02:97:18 (NUS service 6e400001-b5a3-f393-e0a9-e50e24dcca9e)");
 }

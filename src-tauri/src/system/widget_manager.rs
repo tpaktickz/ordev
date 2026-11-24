@@ -144,8 +144,10 @@ pub async fn spawn_widget_window_internal(app: &AppHandle, plugin_id: &str) -> R
         .transparent(win_cfg.transparent)
         .shadow(has_decorations)
         .always_on_top(win_cfg.always_on_top)
-        .skip_taskbar(win_cfg.skip_taskbar)
-        .drag_and_drop(false)
+        .skip_taskbar(win_cfg.skip_taskbar);
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(false);
+    let mut builder = builder
         .initialization_script(&init_script)
         .visible(false); // Conceal during initial DOM mount to avoid white flash
 

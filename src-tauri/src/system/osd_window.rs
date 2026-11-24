@@ -176,10 +176,10 @@ pub async fn build_osd_window_async(app: &AppHandle) -> Result<String, String> {
     .transparent(true)
     .shadow(false)
     .always_on_top(true)
-    .skip_taskbar(true)
-    .drag_and_drop(false)
-    .initialization_script(init_script)
-    .visible(false);
+    .skip_taskbar(true);
+    #[cfg(windows)]
+    let builder = builder.drag_and_drop(false);
+    let builder = builder.initialization_script(init_script).visible(false);
 
     match builder.build() {
         Ok(win) => {

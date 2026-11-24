@@ -1,8 +1,3 @@
-use windows::Win32::System::Power::{
-    SetThreadExecutionState, ES_AWAYMODE_REQUIRED, ES_CONTINUOUS, ES_DISPLAY_REQUIRED,
-    ES_SYSTEM_REQUIRED,
-};
-
 /// Start dedicated background watcher for Bluetooth, Wi-Fi, Camera, WinLock, and FnLock states
 /// Polls every 600ms (direct EC & WinRT in-process COM call, ~0.5ms execution, 0.0% CPU)
 /// and emits events to Tauri whenever external keyboard hotkeys or control center changes occur.
@@ -159,12 +154,8 @@ pub fn start_hardware_state_watcher(
             if super::is_screen_off() {
                 let unblock_tick = super::get_screen_off_unblock_tick();
                 if unblock_tick > 0 {
-                    let mut lii = super::LASTINPUTINFO {
-                        cb_size: std::mem::size_of::<super::LASTINPUTINFO>() as u32,
-                        dw_time: 0,
-                    };
-                    if unsafe { super::GetLastInputInfo(&mut lii) } != 0 {
-                        if lii.dw_time > unblock_tick.saturating_add(50) {
+                    if let Some(idle_ms) = super::last_input_tick() {
+                        if idle_ms < 50 {
                             super::set_screen_off(false);
                             crate::log_info!("SCREEN", "User peripheral interaction detected after screen off; display active.");
                         }
@@ -186,21 +177,16 @@ pub fn start_hardware_state_watcher(
             };
 
             if desired_lock != current_power_lock {
-                unsafe {
-                    match desired_lock {
-                        ActivePowerLock::Normal => {
-                            SetThreadExecutionState(ES_CONTINUOUS);
-                            crate::log_info!("POWER_STATE", "Power lock released: Normal system sleep and display idle timers restored.");
-                        }
-                        ActivePowerLock::KeepAwake => {
-                            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_DISPLAY_REQUIRED);
-                            crate::log_info!("POWER_STATE", "Power lock acquired: Keep-awake active (display and system kept awake).");
-                        }
-                        ActivePowerLock::ScreenOffAway => {
-                            SetThreadExecutionState(ES_CONTINUOUS | ES_SYSTEM_REQUIRED | ES_AWAYMODE_REQUIRED);
-                            crate::log_info!("POWER_STATE", "Power lock acquired: Screen-off active (system awake in away-mode).");
-                        }
-                    }
+                let state = match desired_lock {
+                    ActivePowerLock::Normal => super::ExecutionState::Normal,
+                    ActivePowerLock::KeepAwake => super::ExecutionState::KeepAwake,
+                    ActivePowerLock::ScreenOffAway => super::ExecutionState::ScreenOffAway,
+                };
+                super::set_execution_state(state);
+                match desired_lock {
+                    ActivePowerLock::Normal => crate::log_info!("POWER_STATE", "Power lock released: Normal system sleep and display idle timers restored."),
+                    ActivePowerLock::KeepAwake => crate::log_info!("POWER_STATE", "Power lock acquired: Keep-awake active (display and system kept awake)."),
+                    ActivePowerLock::ScreenOffAway => crate::log_info!("POWER_STATE", "Power lock acquired: Screen-off active (system awake in away-mode)."),
                 }
                 current_power_lock = desired_lock;
             }
