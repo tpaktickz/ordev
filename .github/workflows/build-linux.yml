@@ -221,7 +221,7 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          dnf -y install git tar curl rpm-build nodejs npm pkgconf-pkg-config \
+          dnf -y install git tar curl rpm-build nodejs npm gcc gcc-c++ make pkgconf-pkg-config \
             webkit2gtk4.1-devel gtk3-devel librsvg2-devel libappindicator-gtk3-devel \
             openssl-devel dbus-devel systemd-devel libsoup3-devel zlib-devel
 

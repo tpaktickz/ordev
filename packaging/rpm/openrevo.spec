@@ -10,6 +10,9 @@ Source0:        %{name}-%{version}.tar.gz
 
 BuildRequires:  cargo
 BuildRequires:  rust
+BuildRequires:  gcc
+BuildRequires:  gcc-c++
+BuildRequires:  make
 BuildRequires:  nodejs
 BuildRequires:  npm
 BuildRequires:  pkgconf-pkg-config
