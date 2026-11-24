@@ -253,12 +253,12 @@ export component MainWindow inherits Window {
 
 ## P5 打包与权限
 
-1. `PKGBUILD`（`openrevo` / `openrevo-git`）：`depends=(webkit2gtk-4.1 gtk3 power-profiles-daemon bluez colord)`，`makedepends=(rust nodejs pnpm)`，装 `/usr/bin/open-revo`、`/usr/share/applications/*.desktop`、图标、三个伴生 bin。
-2. `udev` 规则：`pwris`/`hidraw`/`backlight` 的 `uaccess` 标签；`/etc/modules-load.d/openrevo.conf` 写 `ec_sys`。
-3. `modprobe` 参数 `write_support=1` 由 `modprobe.d/openrevo.conf` 提供。
-4. 特权写走 polkit action `com.openrevo.ecwrite`，helper 单 bin，用户态失败才提权。
-5. `systemd --user` unit 承载常驻守护；`Restart=on-failure`。
-6. CI：`.github/workflows/release.yml` 加 `build-linux` job（`ubuntu-24.04`，装 `libwebkit2gtk-4.1-dev`，`pnpm build` + `cargo build --release --workspace`，产物打 tar.zst + deb）。
+1. `PKGBUILD` —— **已落地**（`packaging/linux/PKGBUILD`，`openrevo-git`）：`depends` 只放真实硬依赖（webkit2gtk-4.1、gtk3、librsvg、libappindicator-gtk3、hicolor-icon-theme、openssl），`zenity`/`wlr-randr`/`powerprofilesctl` 之类是可选运行时不上 `depends`。装 bin、desktop、三级 hicolor 图标、udev、modprobe、modules-load、user unit、LICENSE。`makepkg --printsrcinfo` 通过。
+2. `udev` 规则 —— **已落地**（`packaging/linux/60-openrevo.rules`）：hidraw（048d:600b、048d:ce00）与 `backlight` 打 `uaccess`；`/etc/modules-load.d/openrevo.conf` 写 `ec_sys`。
+3. `modprobe` 参数 `write_support=1` —— **已落地**（`packaging/linux/modprobe-openrevo.conf`）。
+4. 特权写 —— **未落地**：目前靠 root/CAP_SYS_RAWIO 直接用（`packaging/linux/BUILD.md` 里给了 `setcap` 一行），polkit `com.openrevo.ecwrite` + 单 helper bin 还没写。EC 全量功能在普通用户下因此只有 sysfs 那一档可用。
+5. `systemd --user` unit —— **已落地**（`packaging/linux/openrevo.service`，`Restart=on-failure`、`PartOf=graphical-session.target`、不带 `--visible` 即零占用待机）。与 XDG autostart 二选一，同时开会起两个进程（single-instance 会折叠）。
+6. CI —— **未落地**：`.github/workflows/release.yml` 的 `build-linux` job 还没加。
 
 ---
 

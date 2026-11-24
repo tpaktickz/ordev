@@ -1,5 +1,7 @@
 export component OsdWindow inherits Window {
-    title: "";
+    // Wayland toplevels are titled; an empty string leaves a blank entry in the
+    // task switcher. The Windows build has no frame and never shows it.
+    title: "OpenRevo OSD";
     width: 640px;
     height: 130px;
     no-frame: true;
