@@ -173,12 +173,16 @@ jobs:
       # makepkg refuses to run as root and the Arch container is root by default.
       - name: Build package
         run: |
-          useradd -m builder
+          useradd -m -s /bin/bash builder
+          # makepkg -s installs makedepends through sudo; give the builder account
+          # passwordless rights or it stalls on a prompt nobody answers.
+          echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
+          chmod 0440 /etc/sudoers.d/builder
           chown -R builder:builder .
           cd packaging/linux
           runuser -u builder -- env \
             _repo="$GITHUB_REPOSITORY" \
-            _commit="$(git rev-parse HEAD)" \
+            _commit="${{ github.sha }}" \
             makepkg -s --noconfirm --nocheck
           ls -1 ./*.pkg.tar.zst
 
