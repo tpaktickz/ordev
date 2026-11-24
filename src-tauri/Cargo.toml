@@ -49,6 +49,7 @@ rhai = { version = "1.19", features = ["sync", "no_module", "no_custom_syntax", 
 [target.'cfg(target_os = "linux")'.dependencies]
 dbus = "0.9"
 ksni = "0.2"
+libc = "0.2"
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"

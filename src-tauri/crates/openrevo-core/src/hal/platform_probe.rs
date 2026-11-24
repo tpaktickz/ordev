@@ -150,6 +150,28 @@ pub fn get_platform_channel() -> PlatformChannelKind {
             }
         }
 
+        #[cfg(not(windows))]
+        {
+            // Linux has no SCM/WMI stack, so the channel is decided by firmware
+            // identity plus a live transport. Both halves matter: a Tongfang
+            // board with `ec_sys` unloaded must not claim the EC is usable.
+            if crate::pal::dmi::is_tongfang_family() {
+                if crate::driver::wmi_ec::is_acpi_driver_available() {
+                    crate::log_info!(
+                        "PLATFORM_PROBE",
+                        "Platform identified: Tongfang family ({}) with a live EC channel",
+                        crate::pal::dmi::identity_summary()
+                    );
+                    return PlatformChannelKind::TongfangAcpiKernel;
+                }
+                crate::log_warn!(
+                    "PLATFORM_PROBE",
+                    "Tongfang family ({}) but no EC channel: load ec_sys with write_support=1 (`sudo modprobe ec_sys write_support=1`) or use the tongfang-mifs-wmi DKMS driver",
+                    crate::pal::dmi::identity_summary()
+                );
+            }
+        }
+
         PlatformChannelKind::Unknown
     })
 }

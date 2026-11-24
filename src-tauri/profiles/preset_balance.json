@@ -1,0 +1,95 @@
+{
+  "id": "preset_balance",
+  "name": "均衡电竞",
+  "file_name": "preset_balance.json",
+  "icon_key": "zap",
+  "is_builtin": true,
+  "profile": {
+    "cpu_temp_target_enabled": true,
+    "cpu_temp_target": 95,
+    "cpu_pl1_watts": 65,
+    "cpu_pl2_watts": 90,
+    "cpu_pl4_watts": 120,
+    "bios_oc_enabled": false,
+    "gpu_super_perf": true,
+    "gpu_ctgp_enabled": false,
+    "gpu_ctgp_watts": 100,
+    "gpu_db_enabled": true,
+    "gpu_db_watts": 25,
+    "gpu_core_offset_mhz": 0,
+    "gpu_mem_offset_mhz": 0,
+    "fan_ramp_rate": true,
+    "fan_ramp_speed_ms": 300,
+    "fan_isolated_output": true,
+    "fan_curve_enabled": false,
+    "cpu_fan_curve": [
+      {
+        "temp": 40,
+        "duty": 20
+      },
+      {
+        "temp": 50,
+        "duty": 30
+      },
+      {
+        "temp": 60,
+        "duty": 45
+      },
+      {
+        "temp": 68,
+        "duty": 55
+      },
+      {
+        "temp": 75,
+        "duty": 65
+      },
+      {
+        "temp": 82,
+        "duty": 75
+      },
+      {
+        "temp": 88,
+        "duty": 85
+      },
+      {
+        "temp": 95,
+        "duty": 100
+      }
+    ],
+    "gpu_fan_curve": [
+      {
+        "temp": 40,
+        "duty": 20
+      },
+      {
+        "temp": 50,
+        "duty": 30
+      },
+      {
+        "temp": 60,
+        "duty": 45
+      },
+      {
+        "temp": 68,
+        "duty": 55
+      },
+      {
+        "temp": 75,
+        "duty": 65
+      },
+      {
+        "temp": 82,
+        "duty": 75
+      },
+      {
+        "temp": 88,
+        "duty": 85
+      },
+      {
+        "temp": 95,
+        "duty": 100
+      }
+    ],
+    "fan_curve_linked": true
+  }
+}

@@ -4309,6 +4309,7 @@ version = "0.9.8"
 dependencies = [
  "dbus",
  "ksni",
+ "libc",
  "libloading 0.8.9",
  "openrevo-core",
  "openrevo-main",

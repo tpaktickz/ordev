@@ -1610,20 +1610,43 @@ mod regression_tests {
 
     #[test]
     fn regression_failed_config_save_preserves_cache_and_original_file() {
-        use std::os::windows::fs::OpenOptionsExt;
         let dir = std::env::temp_dir().join(format!("openrevo-config-failure-{}", std::process::id()));
         fs::create_dir(&dir).unwrap();
         let path = dir.join("config.json");
         let original = track_snapshot(isolated_config());
         let bytes = serde_json::to_vec_pretty(&original).unwrap();
         fs::write(&path, &bytes).unwrap();
-        let lock = fs::OpenOptions::new().read(true).share_mode(0).open(&path).unwrap();
+        // Windows blocks the renamer by holding the target with share_mode(0).
+        // POSIX rename ignores open handles, so the failure is produced the way
+        // it actually happens on unix: the directory rejects new files.
+        let mut lock_opts = fs::OpenOptions::new();
+        lock_opts.read(true);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            lock_opts.share_mode(0);
+        }
+        let lock = lock_opts.open(&path).unwrap();
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut mode = fs::metadata(&dir).unwrap().permissions();
+            mode.set_mode(0o555);
+            fs::set_permissions(&dir, mode).unwrap();
+        }
         let mut cache = Some(original.clone());
         let mut draft = original;
         draft.osd_scale = "120%".into();
         assert!(commit_config(&mut cache, &path, draft).is_err());
         assert_eq!(cache.as_ref().unwrap().osd_scale, "100%");
         drop(lock);
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mut mode = fs::metadata(&dir).unwrap().permissions();
+            mode.set_mode(0o755);
+            fs::set_permissions(&dir, mode).unwrap();
+        }
         assert_eq!(fs::read(&path).unwrap(), bytes);
         assert_eq!(fs::read_dir(&dir).unwrap().count(), 1);
         fs::remove_file(path).unwrap();

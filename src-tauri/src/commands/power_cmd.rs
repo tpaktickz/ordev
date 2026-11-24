@@ -27,43 +27,9 @@ pub struct PowerSettingsInfo {
 
 pub use crate::system::power::ppm::WindowsPowerScheme;
 
-#[repr(C)]
-struct SYSTEM_POWER_STATUS {
-    ac_line_status: u8,
-    battery_flag: u8,
-    battery_life_percent: u8,
-    system_status_flag: u8,
-    battery_life_time: u32,
-    battery_full_life_time: u32,
-}
-
-extern "system" {
-    fn GetSystemPowerStatus(lpSystemPowerStatus: *mut SYSTEM_POWER_STATUS) -> i32;
-}
-
-pub fn get_live_power_status() -> (u8, bool, bool) {
-    let mut status = SYSTEM_POWER_STATUS {
-        ac_line_status: 1,
-        battery_flag: 0,
-        battery_life_percent: 100,
-        system_status_flag: 0,
-        battery_life_time: 0,
-        battery_full_life_time: 0,
-    };
-    let success = unsafe { GetSystemPowerStatus(&mut status) };
-    if success != 0 {
-        let percent = if status.battery_life_percent <= 100 {
-            status.battery_life_percent
-        } else {
-            100
-        };
-        let is_ac = status.ac_line_status == 1;
-        let is_charging = (status.battery_flag & 0x08) != 0;
-        (percent, is_ac, is_charging)
-    } else {
-        (100, true, false)
-    }
-}
+// The live battery read lives in the core (`GetSystemPowerStatus` on Windows,
+// `/sys/class/power_supply` on Linux); the shell only forwards it.
+pub use openrevo_core::system::power::status::get_live_power_status;
 
 static DGPU_CACHE: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
 

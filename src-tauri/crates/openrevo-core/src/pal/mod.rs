@@ -8,9 +8,12 @@
 // the two backends share nothing but the API shape.
 
 pub mod display_color;
+pub mod dmi;
 pub mod ec;
+pub mod evdev;
 pub mod firmware;
 pub mod input;
+pub mod keymap;
 pub mod power;
 pub mod process;
 pub mod reg;

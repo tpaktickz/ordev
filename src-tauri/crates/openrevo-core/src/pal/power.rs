@@ -10,8 +10,8 @@
 //! Windows maps both onto `SetThreadExecutionState` / `GetLastInputInfo`.
 //! Linux maps the lock onto a logind inhibitor (via `systemd-inhibit`, which is
 //! the freedesktop-standard way to ask logind for one and works on every
-//! desktop), and reports the idle tick as unknown until the evdev backend
-//! exists — no cross-desktop global idle counter is exposed without one.
+//! desktop) and reads the idle tick from the evdev reader (`pal::evdev`), since
+//! neither Wayland nor logind exposes a cross-desktop input timestamp.
 
 /// What the watcher thread wants the machine to do.
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -105,8 +105,7 @@ mod portable_impl {
 
     static INHIBITOR: Mutex<Option<Inhibitor>> = Mutex::new(None);
 
-    /// The start instant of this process: the best idle reference available
-    /// until evdev input tracking lands.
+    /// Kept as the idle reference origin for callers that need one.
     static START: std::sync::OnceLock<Instant> = std::sync::OnceLock::new();
 
     fn what_for(state: ExecutionState) -> &'static str {
@@ -189,15 +188,14 @@ mod portable_impl {
     }
 
     pub fn last_input_tick() -> Option<u32> {
-        // No portable global idle counter: X11 has XScreenSaverQueryInfo (X11
-        // only, forbidden by the Wayland-first target), the compositor exposes
-        // nothing on the wire protocol, and logind's IdleHint is a boolean
-        // hint owned by the session, not an input timestamp. Until the evdev
-        // backend samples /dev/input/event* directly, report "unknown" so the
-        // caller falls back to its other wake-up heuristics.
+        // Fed by the evdev reader (`pal::evdev`), which pumps /dev/input/event*
+        // and stamps every key, button and motion event. No compositor or
+        // display server is consulted, so it behaves the same on Wayland and
+        // X11. Returns "unknown" only while no keyboard was opened (wrong
+        // group, or no keyboard attached).
         let start = START.get_or_init(Instant::now);
         let _ = start;
-        None
+        crate::pal::evdev::idle_ms().map(|idle| idle.min(u32::MAX as u64) as u32)
     }
 }
 

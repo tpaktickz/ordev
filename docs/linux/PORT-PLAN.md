@@ -73,7 +73,7 @@ sudo pacman -S --needed rust webkit2gtk-4.1 librsvg libappindicator-gtk3 gtk-lay
 
 ---
 
-## P1 编译基线清零
+## P1 编译基线清零（已完成）
 
 > 目标：`cargo check --workspace` 通过。允许 no-op，但**公共 API 签名必须与 Windows 版逐字一致**，上层调用点不改。
 
@@ -131,6 +131,16 @@ pub fn processes() -> &'static dyn ProcessPort;
 
 `cargo check --workspace` 零错误零警告（`unused import` 一并清）。此步不提交推送，与 P2 一起过 review。
 
+### 1.5 实际落地（与 1.1 的偏差，已执行）
+
+§1.1 设计的是 trait object 端口表，落地时改成了**同名同签名的自由函数**：trait 需要厚一层 `dyn` 装箱，而所有调用点都只要一个同步函数，自由函数让 Windows 分支能原样搬进 `#[cfg(windows)]`（`pal/ec.rs` 的 `windows_arm` 就是这么保住 IOCTL 与 MULong 回退的），跨平台调用点一行不改。落地的 `pal/` 全部是这一形态：
+
+- `pal/ec.rs`（EC 端口）、`pal/process.rs`（`snapshot`/`terminate`/`oem_installed`/`run_quiet`/`command`）、`pal/reg.rs`（`RegRoot` + 读写/枚举/备份）、`pal/firmware.rs`（efivarfs / pnputil↔pci rescan / GPU 服务 / reboot）、`pal/display_color.rs`（gamma、ICC 关联）、`pal/xdg.rs`（freedesktop basedir）、`pal/power.rs`（执行状态抑制、空闲时刻）、`pal/input.rs`（按键查询）。
+
+模块处置也从"整模块搬走"改成三档，按耦合度选：**整文件 `#[path]` 拆分**（`display`、`wmi_*`、`hooks`、`power_listener`、`win32_tray`、`webview_dock`、`openrevo-main/window`）、**同文件 `#[cfg]` 门控 + 底部同名孪生**（`sandbox`、`service_mgr`、`color_calibration`、`ble_cooler`、`hid_ffi`、`switches/*`、`cloud_icc`、`display_tuning`）、**纯桩**（`bld_driver_mgr` 的 SCM、`hid_ffi` 的 Win32 FFI）。
+
+链接是独立关卡：`cargo check` 绿了不代表能出 `.so`。`openrevo-core` 的 `crate-type` 只有 `lib`，rlib 不链接，所以 `#[link(name="hid"/"setupapi"/"kernel32"/"user32"/"advapi32")]` 的缺失一直是隐形的；必须 `cargo rustc --crate-type cdylib` 才会暴露 `ld.lld: error: unable to find library -lhid` 之类。P1 的验收因此加一条：**cdylib 链接通过**。
+
 ---
 
 ## P2 Linux HAL 驱动
@@ -160,7 +170,7 @@ pub fn processes() -> &'static dyn ProcessPort;
 
 ---
 
-## P3 子系统替换
+## P3 子系统替换（进行中）
 
 | 子系统 | Windows 现状 | Linux 方案 |
 | :--- | :--- | :--- |
@@ -176,6 +186,28 @@ pub fn processes() -> &'static dyn ProcessPort;
 | 窗口定位 | `SetWindowPos` 绝对坐标 | `tauri` 逻辑坐标；Wayland 下无绝对定位，用 `set_position` 尽力 + 居中兜底 |
 
 `system/takeover/*` 整体降级为 `NotApplicable`：KDE 没有可被接管的 OEM 通知区域。
+
+### P3 交付状态
+
+已落地（`1c86db6`、`01bcb2d`）：
+
+- 托盘：`src/system/tray_linux.rs`，`ksni` 0.2 的 StatusNotifierItem，菜单项与 Windows 版一一对应。`perform()` / `current_menu_state()` / `TrayAction` 抽到平台无关的 `win32_tray.rs` 门面，两个后端共用。
+- 睡眠/唤醒：`src/system/power_events/`，logind `PrepareForSleep` / `PrepareForShutdown` 信号（`dbus` 0.9，系统总线），合盖读 `/proc/acpi/button/lid/*/state`。`sleep_guard`/`wake_guard`/`resume_pipeline` 等状态机逐字抽出共用。
+- 电源抑制：`pal::power::set_execution_state` 用 `systemd-inhibit --mode block sleep infinity` 子进程，状态映射 `Normal`/`KeepAwake`/`ScreenOffAway`。
+- 自启：`system/autostart_linux.rs` 写 `$XDG_CONFIG_HOME/autostart/openrevo.desktop`。
+- 服务接管：`systemctl --user mask --now`，unit 名按 `OEM_TASKS` 探测。
+- 显示：`system/display.rs` 的 DRM/EDID 分支（`wlr-randr` → `kscreen-doctor` → `xrandr`）、亮度走 `/sys/class/backlight`。
+- 色彩：gamma 写 `/sys/class/drm/<conn>/gamma`；ICC 关联落 `<XDG data>/openrevo/associations.conf`。
+- 设备开关：触摸板走 EC 位，无线电走 `/sys/class/rfkill`，摄像头走 `/sys/class/video4linux`，麦克风走 `wpctl`/`pactl`。
+- 文件对话框：`zenity` → `kdialog`。
+
+未落地（仍是空缺，不是完成）：
+
+- **热键**：`hooks_linux` 只转调 `init_shortcuts`，evdev 抓取与 portal `GlobalShortcuts` 都还没接。
+- **空闲检测**：`pal::power::last_input_tick` 返回 `None`，所以屏灭后"用户动了"的判定退化为未知。
+- **BlueZ**：`ble_cooler` 的扫描/连接一律返回 Err，蓝牙水冷在 Linux 当前不可用。
+- **colord**：ICC 安装只写关联文件，没让 colord 真挂载。
+- **native_wry**：WebView2 合成窗口在 Linux 仍是待办，插件宿主改由 Tauri 独立 toplevel 承担（`webview_dock` 的 Linux 分支）。
 
 ---
 

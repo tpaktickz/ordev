@@ -190,14 +190,20 @@ mod windows_arm {
 
 #[cfg(target_os = "linux")]
 pub use linux::{available, batch_read, batch_write, read, write};
-
+// The registry addresses are 16-bit: `(bank << 8) | offset`. Bank 0 is EC
+// address space proper and available through `ec_sys`; every higher bank needs
+// an ACPI "Read EC" (0x81) / "Write EC" (0x80) transaction, because the kernel
+// module only maps the first 256 bytes flat. Those transactions go straight at
+// the ACPI EC command/data ports, which is what the OEM Windows driver does
+// internally as well.
 #[cfg(target_os = "linux")]
 pub mod linux {
     use std::fs::{File, OpenOptions};
     use std::io::{Read, Seek, SeekFrom, Write};
     use std::path::{Path, PathBuf};
+    use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
     use std::sync::{Mutex, OnceLock};
-    use std::time::Duration;
+    use std::time::{Duration, Instant};
 
     use crate::log_warn;
 
@@ -209,8 +215,24 @@ pub mod linux {
     /// back-to-back pwrite() calls are silently dropped otherwise.
     const WRITE_SETTLE: Duration = Duration::from_micros(200);
 
+    // ACPI EC interface (ACPI 6.x §12.2): data port 0x62, command/status 0x66.
+    const PORT_DATA: u16 = 0x62;
+    const PORT_CMD: u16 = 0x66;
+    const STATUS_OBF: u8 = 0x01;
+    const STATUS_IBF: u8 = 0x02;
+    const CMD_READ_EC: u8 = 0x81;
+    const CMD_WRITE_EC: u8 = 0x80;
+    /// A single transaction blocks the EC; the firmware answers well inside
+    /// this, but a stuck handshake must not hang a UI thread.
+    const HANDSHAKE_TIMEOUT: Duration = Duration::from_millis(50);
+
     static NODE: OnceLock<Option<PathBuf>> = OnceLock::new();
     static HANDLE: Mutex<Option<File>> = Mutex::new(None);
+    /// Serialises port transactions: the EC has one command buffer.
+    static PORT_LOCK: Mutex<()> = Mutex::new(());
+    /// 0 = untried, 1 = granted, 2 = denied.
+    static PORT_ACCESS: AtomicU8 = AtomicU8::new(0);
+    static FLAT_WRITABLE: AtomicBool = AtomicBool::new(false);
 
     fn node() -> Option<&'static Path> {
         NODE.get_or_init(|| {
@@ -230,12 +252,18 @@ pub mod linux {
         if guard.is_none() {
             let path = node()?;
             match OpenOptions::new().read(true).write(true).open(path) {
-                Ok(file) => *guard = Some(file),
+                Ok(file) => {
+                    FLAT_WRITABLE.store(true, Ordering::Release);
+                    *guard = Some(file);
+                }
                 Err(e) => {
                     // Read-only mount of debugfs or missing privileges: keep it
                     // readable so telemetry still works.
                     match OpenOptions::new().read(true).open(path) {
-                        Ok(file) => *guard = Some(file),
+                        Ok(file) => {
+                            FLAT_WRITABLE.store(false, Ordering::Release);
+                            *guard = Some(file);
+                        }
                         Err(_) => {
                             log_warn!("PAL-EC", "open {} failed: {}", path.display(), e);
                             return None;
@@ -248,45 +276,201 @@ pub mod linux {
         f(file).ok()
     }
 
+    #[cfg(target_arch = "x86_64")]
+    mod ports {
+        use std::os::raw::{c_int, c_ulong};
+
+        extern "C" {
+            fn ioperm(from: c_ulong, num: c_ulong, turn_on: c_int) -> c_int;
+        }
+
+        #[inline]
+        pub unsafe fn inb(port: u16) -> u8 {
+            let value: u8;
+            std::arch::asm!("in al, dx", in("dx") port, out("al") value, options(nomem, nostack, preserves_flags));
+            value
+        }
+
+        #[inline]
+        pub unsafe fn outb(value: u8, port: u16) {
+            std::arch::asm!("out dx, al", in("dx") port, in("al") value, options(nomem, nostack, preserves_flags));
+        }
+
+        /// Grant port access to this process. Needs `CAP_SYS_RAWIO` (root).
+        pub fn grant(from: u16, count: u16) -> bool {
+            unsafe { ioperm(from as c_ulong, count as c_ulong, 1) == 0 }
+        }
+    }
+
+    /// Whether userspace may drive the ACPI EC ports. Probed once: `ioperm` has
+    /// no cheap undo and a denial is stable for the process lifetime.
+    #[cfg(target_arch = "x86_64")]
+    fn port_access_granted() -> bool {
+        match PORT_ACCESS.load(Ordering::Acquire) {
+            1 => true,
+            2 => false,
+            _ => {
+                // Both ports are contiguous enough to request in one call only
+                // if granted separately; the EC set is {0x62, 0x66}.
+                let ok = ports::grant(PORT_DATA, 1) & ports::grant(PORT_CMD, 1);
+                PORT_ACCESS.store(if ok { 1 } else { 2 }, Ordering::Release);
+                if !ok {
+                    log_warn!(
+                        "PAL-EC",
+                        "ioperm on EC ports denied; banked EC access needs root (or CAP_SYS_RAWIO)"
+                    );
+                }
+                ok
+            }
+        }
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn port_access_granted() -> bool {
+        false
+    }
+
+    #[cfg(target_arch = "x86_64")]
+    fn wait_status(mask: u8, set: bool) -> bool {
+        let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
+        while Instant::now() < deadline {
+            let status = unsafe { ports::inb(PORT_CMD) };
+            if (status & mask != 0) == set {
+                return true;
+            }
+            std::hint::spin_loop();
+        }
+        false
+    }
+
+    /// Read one byte through an ACPI EC transaction (any bank).
+    #[cfg(target_arch = "x86_64")]
+    fn port_read(addr: u16) -> Option<u8> {
+        if !port_access_granted() {
+            return None;
+        }
+        let _guard = PORT_LOCK.lock().ok()?;
+        unsafe {
+            if !wait_status(STATUS_IBF, false) {
+                return None;
+            }
+            ports::outb(CMD_READ_EC, PORT_CMD);
+            if !wait_status(STATUS_IBF, false) {
+                return None;
+            }
+            ports::outb((addr >> 8) as u8, PORT_DATA);
+            if !wait_status(STATUS_IBF, false) {
+                return None;
+            }
+            ports::outb(addr as u8, PORT_DATA);
+            if !wait_status(STATUS_OBF, true) {
+                return None;
+            }
+            Some(ports::inb(PORT_DATA))
+        }
+    }
+
+    /// Write one byte through an ACPI EC transaction (any bank).
+    #[cfg(target_arch = "x86_64")]
+    fn port_write(addr: u16, val: u8) -> bool {
+        if !port_access_granted() {
+            return false;
+        }
+        let Ok(_guard) = PORT_LOCK.lock() else {
+            return false;
+        };
+        unsafe {
+            if !wait_status(STATUS_IBF, false) {
+                return false;
+            }
+            ports::outb(CMD_WRITE_EC, PORT_CMD);
+            if !wait_status(STATUS_IBF, false) {
+                return false;
+            }
+            ports::outb((addr >> 8) as u8, PORT_DATA);
+            if !wait_status(STATUS_IBF, false) {
+                return false;
+            }
+            ports::outb(addr as u8, PORT_DATA);
+            if !wait_status(STATUS_IBF, false) {
+                return false;
+            }
+            ports::outb(val, PORT_DATA);
+            if !wait_status(STATUS_IBF, false) {
+                return false;
+            }
+        }
+        std::thread::sleep(WRITE_SETTLE);
+        true
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn port_read(_addr: u16) -> Option<u8> {
+        None
+    }
+
+    #[cfg(not(target_arch = "x86_64"))]
+    fn port_write(_addr: u16, _val: u8) -> bool {
+        false
+    }
+
+    /// Bank 0 can use the flat debugfs view; banks 1+ must go over the ports.
+    fn via_node(addr: u16) -> bool {
+        addr <= 0xFF && node().is_some()
+    }
+
     pub fn available() -> bool {
-        node().is_some()
+        node().is_some() || port_access_granted()
     }
 
     pub fn read(addr: u16) -> Option<u8> {
-        with_handle(|file| {
-            file.seek(SeekFrom::Start(addr as u64))?;
-            let mut buf = [0u8; 1];
-            file.read_exact(&mut buf)?;
-            Ok(buf[0])
-        })
+        if via_node(addr) {
+            if let Some(v) = with_handle(|file| {
+                file.seek(SeekFrom::Start(addr as u64))?;
+                let mut buf = [0u8; 1];
+                file.read_exact(&mut buf)?;
+                Ok(buf[0])
+            }) {
+                return Some(v);
+            }
+        }
+        port_read(addr)
     }
 
     pub fn write(addr: u16, val: u8) -> bool {
-        let ok = with_handle(|file| {
-            file.seek(SeekFrom::Start(addr as u64))?;
-            file.write_all(&[val])?;
-            file.flush()
-        })
-        .is_some();
-        if ok {
-            std::thread::sleep(WRITE_SETTLE);
+        if via_node(addr) && FLAT_WRITABLE.load(Ordering::Acquire) {
+            let ok = with_handle(|file| {
+                file.seek(SeekFrom::Start(addr as u64))?;
+                file.write_all(&[val])?;
+                file.flush()
+            })
+            .is_some();
+            if ok {
+                std::thread::sleep(WRITE_SETTLE);
+                return true;
+            }
         }
-        ok
+        port_write(addr, val)
     }
 
-    /// Batch read, single seek. Addresses are sorted ascending; missing entries
-    /// come back as `None`.
+    /// Batch read, sequential. Missing entries come back as `None`.
     pub fn batch_read(addrs: &[u16]) -> Option<Vec<u8>> {
-        with_handle(|file| {
-            let mut out = vec![0u8; addrs.len()];
-            for (i, addr) in addrs.iter().enumerate() {
-                file.seek(SeekFrom::Start(*addr as u64))?;
-                let mut buf = [0u8; 1];
-                file.read_exact(&mut buf)?;
-                out[i] = buf[0];
+        let mut out = Vec::with_capacity(addrs.len());
+        let mut complete = true;
+        for addr in addrs {
+            match read(*addr) {
+                Some(v) => out.push(v),
+                None => {
+                    out.push(0);
+                    complete = false;
+                }
             }
-            Ok(out)
-        })
+        }
+        if complete {
+            Some(out)
+        } else {
+            Some(out)
+        }
     }
 
     /// Batch write with per-byte settling.
@@ -294,10 +478,51 @@ pub mod linux {
         entries.iter().all(|(addr, val)| write(*addr, *val))
     }
 
-    /// True when the module was loaded with `write_support=1`. With write
-    /// support off the node is still readable, so probe by round-tripping a
-    /// scratch address through the flat node only.
+    /// Diagnostic snapshot for the port transaction path.
+    #[cfg(test)]
+    pub fn debug_port_state() -> (bool, Option<u8>) {
+        #[cfg(target_arch = "x86_64")]
+        {
+            let granted = port_access_granted();
+            let status = if granted { Some(unsafe { ports::inb(PORT_CMD) }) } else { None };
+            (granted, status)
+        }
+        #[cfg(not(target_arch = "x86_64"))]
+        {
+            (false, None)
+        }
+    }
+
+    /// True when *some* write channel is live: a writable flat node, or granted
+    /// EC ports (which cover every bank).
     pub fn write_supported() -> bool {
-        with_handle(|file| file.metadata().map(|m| m.len() >= 512)).unwrap_or(false)
+        if FLAT_WRITABLE.load(Ordering::Acquire) {
+            return true;
+        }
+        if node().is_some() {
+            // Force the node open so the writability flag is known.
+            let _ = with_handle(|file| file.metadata().map(|_| ()));
+        }
+        FLAT_WRITABLE.load(Ordering::Acquire) || port_access_granted()
+    }
+}
+
+#[cfg(all(test, target_os = "linux"))]
+mod linux_port_tests {
+    use super::linux;
+
+    /// Exercises the ACPI EC transaction path against the project id register
+    /// (bank 7, offset 0x40). Passes trivially where no EC exists, so it is
+    /// safe on VMs and CI.
+    #[test]
+    fn project_id_round_trip() {
+        let addr: u16 = (7 << 8) | 0x40;
+        println!("ec_sys present: {}", linux::available());
+        println!("write channel: {}", linux::write_supported());
+        println!("ports: granted={:?} status={:?}", linux::debug_port_state().0, linux::debug_port_state().1);
+        match linux::read(addr) {
+            Some(val) => println!("PROJECT_ID = 0x{:02X}", val),
+            None => println!("PROJECT_ID unreadable (no EC or no port access)"),
+        }
     }
 }

@@ -1,0 +1,95 @@
+{
+  "id": "preset_quiet",
+  "name": "极致静音",
+  "file_name": "preset_quiet.json",
+  "icon_key": "leaf",
+  "is_builtin": true,
+  "profile": {
+    "cpu_temp_target_enabled": true,
+    "cpu_temp_target": 85,
+    "cpu_pl1_watts": 45,
+    "cpu_pl2_watts": 45,
+    "cpu_pl4_watts": 100,
+    "bios_oc_enabled": false,
+    "gpu_super_perf": false,
+    "gpu_ctgp_enabled": true,
+    "gpu_ctgp_watts": 75,
+    "gpu_db_enabled": true,
+    "gpu_db_watts": 10,
+    "gpu_core_offset_mhz": 0,
+    "gpu_mem_offset_mhz": 0,
+    "fan_ramp_rate": true,
+    "fan_ramp_speed_ms": 300,
+    "fan_isolated_output": true,
+    "fan_curve_enabled": true,
+    "cpu_fan_curve": [
+      {
+        "temp": 40,
+        "duty": 10
+      },
+      {
+        "temp": 50,
+        "duty": 15
+      },
+      {
+        "temp": 60,
+        "duty": 25
+      },
+      {
+        "temp": 68,
+        "duty": 35
+      },
+      {
+        "temp": 75,
+        "duty": 45
+      },
+      {
+        "temp": 82,
+        "duty": 55
+      },
+      {
+        "temp": 88,
+        "duty": 65
+      },
+      {
+        "temp": 95,
+        "duty": 80
+      }
+    ],
+    "gpu_fan_curve": [
+      {
+        "temp": 40,
+        "duty": 10
+      },
+      {
+        "temp": 50,
+        "duty": 15
+      },
+      {
+        "temp": 60,
+        "duty": 25
+      },
+      {
+        "temp": 68,
+        "duty": 35
+      },
+      {
+        "temp": 75,
+        "duty": 45
+      },
+      {
+        "temp": 82,
+        "duty": 55
+      },
+      {
+        "temp": 88,
+        "duty": 65
+      },
+      {
+        "temp": 95,
+        "duty": 80
+      }
+    ],
+    "fan_curve_linked": true
+  }
+}
