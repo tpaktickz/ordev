@@ -125,6 +125,8 @@ jobs:
 
       - uses: ./.github/actions/diag-log
         if: failure()
+        with:
+          name: arch
 
       - uses: actions/upload-artifact@v4
         with:
@@ -157,6 +159,9 @@ jobs:
         run: |
           set -euxo pipefail
           exec > >(tee /tmp/step.log) 2>&1
+          # The checkout is owned by the runner's uid, not by root inside this
+          # container, and git refuses to work on it until told otherwise.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           # Debian's rustc is far below what the dependency tree needs (slint and
           # wgpu both sit above 1.80), so the toolchain comes from rustup and is
           # linked into /usr/local/bin where debian/rules will find it.
@@ -196,6 +201,8 @@ jobs:
 
       - uses: ./.github/actions/diag-log
         if: failure()
+        with:
+          name: deb
 
       - uses: actions/upload-artifact@v4
         with:
@@ -224,6 +231,9 @@ jobs:
         run: |
           set -euxo pipefail
           exec > >(tee /tmp/step.log) 2>&1
+          # The checkout is owned by the runner's uid, not by root inside this
+          # container, and git refuses to work on it until told otherwise.
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
           export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
             sh -s -- -y --profile minimal
@@ -246,6 +256,8 @@ jobs:
 
       - uses: ./.github/actions/diag-log
         if: failure()
+        with:
+          name: rpm
 
       - uses: actions/upload-artifact@v4
         with:

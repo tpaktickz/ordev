@@ -6,7 +6,9 @@
 # CARGO_TARGET_DIR is redirected into debian/ so `dh_auto_clean` and
 # dpkg-source -b never walk a target/ directory that cargo owns anyway.
 
-PNPM := pnpm@10.32.1
+# Pinned here as well as in CI so the bundle cannot be produced by a different
+# pnpm than the one the lockfile was written against.
+PNPM := npx --yes pnpm@10.32.1
 TARGET := $(CURDIR)/debian/target
 
 %:
@@ -15,8 +17,8 @@ TARGET := $(CURDIR)/debian/target
 override_dh_auto_configure:
 
 override_dh_auto_build:
-	pnpm install --frozen-lockfile
-	pnpm build
+	$(PNPM) install --frozen-lockfile
+	$(PNPM) build
 	cd src-tauri && CARGO_TARGET_DIR=$(TARGET) cargo build --locked --release --bin open-revo
 	# The EC helper belongs to openrevo-core, so it needs its own -p: --bin alone
 	# is scoped to the default-run package and aborts the build.
