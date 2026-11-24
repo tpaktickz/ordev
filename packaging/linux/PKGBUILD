@@ -52,7 +52,12 @@ build() {
   # crates/openrevo-core/src/bin/openrevo-ec-helper.rs).
   # `--locked`, not `--frozen`: frozen also implies `--offline`, and a clean
   # build container has an empty registry cache.
-  cargo build --locked --release --bin open-revo --bin openrevo-ec-helper
+  #
+  # Two invocations, not one with two `--bin`: the helper belongs to
+  # openrevo-core, and `--bin` is scoped to the default-run package, so a single
+  # call aborts with "no bin target named `openrevo-ec-helper`".
+  cargo build --locked --release --bin open-revo
+  cargo build --locked --release -p openrevo-core --bin openrevo-ec-helper
 }
 
 package() {
