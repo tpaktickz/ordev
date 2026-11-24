@@ -1,0 +1,87 @@
++ git config --global --add safe.directory /__w/ordev/ordev
++ export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
++ RUSTUP_HOME=/opt/rustup
++ CARGO_HOME=/opt/cargo
++ curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs
++ sh -s -- -y --profile minimal
+info: downloading installer
+error: $HOME differs from euid-obtained home directory: you may be using sudo
+error: $HOME directory: /github/home
+error: euid-obtained home directory: /root
+info: profile set to minimal
+info: default host tuple is x86_64-unknown-linux-gnu
+info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+info: downloading 3 components
+info: default toolchain set to stable-x86_64-unknown-linux-gnu
+
+  stable-x86_64-unknown-linux-gnu installed - rustc 1.100.0 (0ef1bc386 2026-11-09)
+
+
+Rust is installed now. Great!
+
+To get started you may need to restart your current shell.
+This would reload your PATH environment variable to include
+Cargo's bin directory (/opt/cargo/bin).
+
+To configure your current shell, you need to source the
+corresponding env file under /opt/cargo.
+
+Consider running the right command for your shell (note the leading DOT):
+. "/opt/cargo/env" # For sh/ash/dash/pdksh
+cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+CC_x86_64-unknown-linux-gnu = None
+cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+CC_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:warning=Compiler family detection failed due to error: ToolNotFound: failed to find tool "cc": No such file or directory (os error 2)
+cargo:rerun-if-env-changed=CPATH
+cargo:rerun-if-env-changed=C_INCLUDE_PATH
+cargo:rerun-if-env-changed=CPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJC_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJCPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=COMPILER_PATH
+cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH
+cargo:rerun-if-env-changed=GCC_EXEC_PREFIX
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+CFLAGS_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+CFLAGS_x86_64-unknown-linux-gnu = None
+warn: no default linker (`cc`) was found in your PATH
+warn: many Rust crates require a system C toolchain to build
++ . /opt/cargo/env
+++ case ":${PATH}:" in
+++ export PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++ ln -sf /opt/cargo/bin/cargo /usr/local/bin/cargo
++ ln -sf /opt/cargo/bin/rustc /usr/local/bin/rustc
++ cargo --version
+cargo 1.100.0 (3acc79c0c 2026-11-05)
++ npm install -g pnpm@10.32.1
+
+added 1 package in 1s
+
+1 package is looking for funding
+  run `npm fund` for details
+++ sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml
+++ head -1
++ VER=0.9.8
++ TOP=/__w/_temp/rpmbuild
++ rm -rf /__w/_temp/rpmbuild
++ mkdir -p /__w/_temp/rpmbuild/SOURCES /__w/_temp/rpmbuild/SPECS /__w/_temp/rpmbuild/BUILD /__w/_temp/rpmbuild/BUILDROOT /__w/_temp/rpmbuild/RPMS /__w/_temp/rpmbuild/SRPMS
++ git archive --prefix=openrevo-0.9.8/ -o /__w/_temp/rpmbuild/SOURCES/openrevo-0.9.8.tar.gz HEAD
++ rpmbuild -ba --define '_topdir /__w/_temp/rpmbuild' --define 'version 0.9.8' packaging/rpm/openrevo.spec
+setting SOURCE_DATE_EPOCH=1795478400
+error: Failed build dependencies:
+	cargo is needed by openrevo-0.9.8-1.fc41.x86_64
+	rust is needed by openrevo-0.9.8-1.fc41.x86_64
