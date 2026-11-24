@@ -99,7 +99,9 @@ pub fn get_platform_channel() -> PlatformChannelKind {
         // 0. Declarative Driver Contract First (Level 0 Architecture)
         // If an explicit manifest matches DMI, the manifest declares the physical channel!
         if let Some(manifest) = crate::hal::declarative::load_matched_manifest() {
-            for channel in manifest.channels.values() {
+            // Every arm returns, so the loop is only ever entered once — it is a
+            // "first declared channel wins" pick, written as `values().next()`.
+            if let Some(channel) = manifest.channels.values().next() {
                 match channel {
                     crate::hal::declarative::model_manifest::ChannelDef::WmiIp3 => {
                         crate::log_info!("PLATFORM_PROBE", "Platform identified via Manifest: Shenzhen IP3 WMI ({})", manifest.id);

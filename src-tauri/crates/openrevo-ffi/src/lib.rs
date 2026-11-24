@@ -199,7 +199,11 @@ pub extern "C" fn openrevo_is_telemetry_active() -> i32 {
 /// # Safety
 /// Pass only pointers returned by `openrevo_*` functions that allocate strings.
 #[no_mangle]
-pub extern "C" fn openrevo_free_string(ptr: *mut c_char) {
+/// # Safety
+/// `ptr` must be null or a pointer produced by one of the string-returning
+/// `openrevo_*` functions in this crate, and must not be freed twice. The extern
+/// signature cannot enforce that, so the contract is `unsafe` for callers too.
+pub unsafe extern "C" fn openrevo_free_string(ptr: *mut c_char) {
     if !ptr.is_null() {
         let _ = catch_unwind(|| unsafe {
             let _ = CString::from_raw(ptr);

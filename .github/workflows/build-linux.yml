@@ -1,0 +1,95 @@
+name: Linux Build
+
+on:
+  push:
+    branches:
+      - wayland-kde
+  pull_request:
+    branches:
+      - wayland-kde
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check, Test & Frontend Build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libssl-dev pkg-config
+
+      - uses: pnpm/action-setup@v4
+        with:
+          run_install: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri -> target
+
+      - name: Install frontend dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Frontend type-check and bundle
+        run: pnpm build
+
+      - name: Cargo check (workspace, Linux target)
+        working-directory: src-tauri
+        run: cargo check --workspace --all-targets
+
+      - name: Clippy (workspace)
+        working-directory: src-tauri
+        # Warnings are tolerated for now: the Windows-era code carries ~150 of them
+        # and gating on those would block the port over style noise. Errors gate.
+        run: cargo clippy --workspace --all-targets
+
+      - name: Unit tests
+        working-directory: src-tauri
+        # The suite is hardware-independent on purpose: anything that needs a real
+        # EC or a discrete GPU asserts the "no hardware" branch instead of skipping.
+        run: cargo test -p openrevo-core --lib
+
+  package:
+    name: Build Arch package
+    runs-on: ubuntu-24.04
+    container: archlinux:base-devel
+    steps:
+      - name: Install build dependencies
+        run: |
+          pacman -Syu --noconfirm --needed git rust nodejs pnpm \
+            webkit2gtk-4.1 gtk3 librsvg libappindicator-gtk3 hicolor-icon-theme openssl
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      # makepkg refuses to run as root, and the Arch container is root by default.
+      - name: Build package as an unprivileged user
+        run: |
+          useradd -m builder
+          chown -R builder:builder .
+          cd packaging/linux
+          # The PKGBUILD pulls its own source from git; point it at the checkout so
+          # CI builds the commit under test rather than a stale remote ref.
+          runuser -u builder -- makepkg -s --noconfirm --nocheck
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openrevo-linux-package
+          path: packaging/linux/*.pkg.tar.zst
+          if-no-files-found: error
