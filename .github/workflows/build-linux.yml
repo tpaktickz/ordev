@@ -156,9 +156,11 @@ jobs:
           fetch-depth: 0
 
       - name: Build .deb
+        shell: bash
         run: |
           set -euxo pipefail
-          exec > >(tee /tmp/step.log) 2>&1
+          : > /tmp/step.log
+          exec > >(tee -a /tmp/step.log) 2>&1
           # The checkout is owned by the runner's uid, not by root inside this
           # container, and git refuses to work on it until told otherwise.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"
@@ -228,9 +230,11 @@ jobs:
           fetch-depth: 0
 
       - name: Build .rpm
+        shell: bash
         run: |
           set -euxo pipefail
-          exec > >(tee /tmp/step.log) 2>&1
+          : > /tmp/step.log
+          exec > >(tee -a /tmp/step.log) 2>&1
           # The checkout is owned by the runner's uid, not by root inside this
           # container, and git refuses to work on it until told otherwise.
           git config --global --add safe.directory "$GITHUB_WORKSPACE"

@@ -23,7 +23,7 @@ runs:
         LOG_NAME: ${{ inputs.name }}
       run: |
         set -uo pipefail
-        if [ ! -s "$LOG_PATH" ]; then
+        if [ ! -e "$LOG_PATH" ]; then
           echo "no log at $LOG_PATH; nothing to publish"
           exit 0
         fi
