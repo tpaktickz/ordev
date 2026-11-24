@@ -1,0 +1,816 @@
++ git config --global --add safe.directory /__w/ordev/ordev
++ export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
++ RUSTUP_HOME=/opt/rustup
++ CARGO_HOME=/opt/cargo
++ curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs
++ sh -s -- -y --profile minimal
+info: downloading installer
+error: $HOME differs from euid-obtained home directory: you may be using sudo
+error: $HOME directory: /github/home
+error: euid-obtained home directory: /root
+info: profile set to minimal
+info: default host tuple is x86_64-unknown-linux-gnu
+info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+info: downloading 3 components
+info: default toolchain set to stable-x86_64-unknown-linux-gnu
+
+  stable-x86_64-unknown-linux-gnu installed - rustc 1.100.0 (0ef1bc386 2026-11-09)
+
+
+Rust is installed now. Great!
+
+To get started you may need to restart your current shell.
+This would reload your PATH environment variable to include
+Cargo's bin directory (/opt/cargo/bin).
+
+To configure your current shell, you need to source the
+corresponding env file under /opt/cargo.
+
+Consider running the right command for your shell (note the leading DOT):
+. "/opt/cargo/env" # For sh/ash/dash/pdksh
+cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+CC_x86_64-unknown-linux-gnu = None
+cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+CC_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:warning=Compiler family detection failed due to error: ToolNotFound: failed to find tool "cc": No such file or directory (os error 2)
+cargo:rerun-if-env-changed=CPATH
+cargo:rerun-if-env-changed=C_INCLUDE_PATH
+cargo:rerun-if-env-changed=CPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJC_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJCPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=COMPILER_PATH
+cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH
+cargo:rerun-if-env-changed=GCC_EXEC_PREFIX
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+CFLAGS_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+CFLAGS_x86_64-unknown-linux-gnu = None
+warn: no default linker (`cc`) was found in your PATH
+warn: many Rust crates require a system C toolchain to build
++ . /opt/cargo/env
+++ case ":${PATH}:" in
+++ export PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++ ln -sf /opt/cargo/bin/cargo /usr/local/bin/cargo
++ ln -sf /opt/cargo/bin/rustc /usr/local/bin/rustc
++ cargo --version
+cargo 1.100.0 (3acc79c0c 2026-11-05)
++ npm install -g pnpm@10.32.1
+
+added 1 package in 745ms
+
+1 package is looking for funding
+  run `npm fund` for details
+++ sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml
+++ head -1
++ VER=0.9.8
++ TOP=/__w/_temp/rpmbuild
++ rm -rf /__w/_temp/rpmbuild
++ mkdir -p /__w/_temp/rpmbuild/SOURCES /__w/_temp/rpmbuild/SPECS /__w/_temp/rpmbuild/BUILD /__w/_temp/rpmbuild/BUILDROOT /__w/_temp/rpmbuild/RPMS /__w/_temp/rpmbuild/SRPMS
++ git archive --prefix=openrevo-0.9.8/ -o /__w/_temp/rpmbuild/SOURCES/openrevo-0.9.8.tar.gz HEAD
++ rpmbuild -ba --nodeps --define '_topdir /__w/_temp/rpmbuild' --define 'version 0.9.8' packaging/rpm/openrevo.spec
+setting SOURCE_DATE_EPOCH=1795478400
+Executing(%mkbuilddir): /bin/sh -e /var/tmp/rpm-tmp.Eiii36
+Executing(%prep): /bin/sh -e /var/tmp/rpm-tmp.RxpfNX
++ umask 022
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ rm -rf openrevo-0.9.8
++ /usr/lib/rpm/rpmuncompress -x /__w/_temp/rpmbuild/SOURCES/openrevo-0.9.8.tar.gz
++ STATUS=0
++ '[' 0 -ne 0 ']'
++ cd openrevo-0.9.8
++ /usr/bin/chmod -Rf a+rX,u+w,g-w,o-w .
++ RPM_EC=0
+++ jobs -p
++ exit 0
+Executing(%build): /bin/sh -e /var/tmp/rpm-tmp.VIbjwU
++ umask 022
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ CFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CFLAGS
++ CXXFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CXXFLAGS
++ FFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FFLAGS
++ FCFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FCFLAGS
++ VALAFLAGS=-g
++ export VALAFLAGS
++ RUSTFLAGS='-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Cforce-frame-pointers=yes -Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes --cap-lints=warn'
++ export RUSTFLAGS
++ LDFLAGS='-Wl,-z,relro -Wl,--as-needed  -Wl,-z,pack-relative-relocs -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -Wl,--build-id=sha1 -specs=/usr/lib/rpm/redhat/redhat-package-notes '
++ export LDFLAGS
++ LT_SYS_LIBRARY_PATH=/usr/lib64:
++ export LT_SYS_LIBRARY_PATH
++ CC=gcc
++ export CC
++ CXX=g++
++ export CXX
++ cd openrevo-0.9.8
++ export CARGO_TARGET_DIR=/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target
++ CARGO_TARGET_DIR=/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target
++ npm i -g pnpm@10.32.1
+
+changed 1 package in 491ms
+
+1 package is looking for funding
+  run `npm fund` for details
++ pnpm install --frozen-lockfile
+Lockfile is up to date, resolution step is skipped
+Packages: +80
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 0, reused 0, downloaded 1, added 0
+Progress: resolved 0, reused 0, downloaded 80, added 80, done
+node_modules/esbuild postinstall$ node install.js
+node_modules/esbuild postinstall: Done
+
+Done in 1.2s using pnpm v10.32.1
++ pnpm build
+
+> open-revo-ui@0.9.8 build /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8
+> tsc && vite build
+
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+[36mvite v5.4.11 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 1663 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                  [39m[1m[2m  0.86 kB[22m[1m[22m[2m │ gzip:   0.47 kB[22m
+[2mdist/[22m[2massets/[22m[32mlogo-BmAeRQ1x.png    [39m[1m[2m 34.04 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mwechat-CQ1ljkRz.jpg  [39m[1m[2m 88.35 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32malipay-CR2EmPpy.jpg  [39m[1m[2m106.65 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[35mindex-DPxCmVs7.css   [39m[1m[2m 68.43 kB[22m[1m[22m[2m │ gzip:  11.62 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-DEgvgxkH.js    [39m[1m[33m667.54 kB[39m[22m[2m │ gzip: 184.17 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 1.81s[39m
++ cd src-tauri
++ cargo build --locked --release --bin open-revo
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded num_enum v0.7.6
+  Downloaded num_enum_derive v0.7.6
+  Downloaded ab_glyph v0.2.32
+  Downloaded num-conv v0.2.2
+  Downloaded num-traits v0.2.19
+  Downloaded presser v0.3.1
+  Downloaded rowan v0.17.0
+  Downloaded pin-utils v0.1.1
+  Downloaded pkg-config v0.3.34
+  Downloaded profiling v1.0.18
+  Downloaded proc-macro-error v1.0.4
+  Downloaded openssl-macros v0.1.1
+  Downloaded phf_codegen v0.13.1
+  Downloaded quick-error v2.0.1
+  Downloaded ordered-stream v0.2.0
+  Downloaded scopeguard v1.2.0
+  Downloaded regex-syntax v0.8.11
+  Downloaded read-fonts v0.41.0
+  Downloaded hashbrown v0.16.1
+  Downloaded pin-project v1.1.13
+  Downloaded scoped-tls-hkt v0.1.5
+  Downloaded percent-encoding v2.3.2
+  Downloaded phf_generator v0.13.1
+  Downloaded raw-window-handle v0.6.2
+  Downloaded schemars v1.2.2
+  Downloaded proc-macro-error-attr v1.0.4
+  Downloaded rgb v0.8.53
+  Downloaded roxmltree v0.21.2
+  Downloaded arrayref v0.3.9
+  Downloaded atomic-waker v1.1.2
+  Downloaded atty v0.2.14
+  Downloaded cfg_aliases v0.2.2
+  Downloaded crypto-common v0.1.7
+  Downloaded bit-set v0.8.0
+  Downloaded cpufeatures v0.2.17
+  Downloaded quote v1.0.47
+  Downloaded as-raw-xcb-connection v1.0.1
+  Downloaded auto-launch v0.5.0
+  Downloaded countme v3.0.1
+  Downloaded ansi_term v0.12.1
+  Downloaded async-process v2.5.0
+  Downloaded bit-set v0.10.0
+  Downloaded async-recursion v1.1.1
+  Downloaded ctor v0.8.0
+  Downloaded anstyle v1.0.14
+  Downloaded async-channel v2.5.0
+  Downloaded async-signal v0.2.14
+  Downloaded atk-sys v0.18.2
+  Downloaded autocfg v1.5.1
+  Downloaded byteorder-lite v0.1.0
+  Downloaded clru v0.6.3
+  Downloaded dbus-codegen v0.9.1
+  Downloaded concurrent-queue v2.5.0
+  Downloaded cursor-icon v1.2.0
+  Downloaded os_pipe v1.2.3
+  Downloaded pico-args v0.5.0
+  Downloaded anyhow v1.0.104
+  Downloaded async-broadcast v0.7.2
+  Downloaded async-executor v1.14.0
+  Downloaded async-task v4.7.1
+  Downloaded atk v0.18.2
+  Downloaded blocking v1.7.0
+  Downloaded convert_case v0.10.0
+  Downloaded async-trait v0.1.92
+  Downloaded calloop-wayland-source v0.3.0
+  Downloaded phf_shared v0.13.1
+  Downloaded proc-macro-crate v1.3.1
+  Downloaded ref-cast-impl v1.0.27
+  Downloaded arboard v3.7.0
+  Downloaded byteorder v1.5.0
+  Downloaded cargo_metadata v0.19.2
+  Downloaded critical-section v1.2.0
+  Downloaded async-io v2.6.0
+  Downloaded async-lock v3.4.2
+  Downloaded bit-vec v0.8.0
+  Downloaded by_address v1.2.1
+  Downloaded crc32fast v1.5.1
+  Downloaded defmt-macros v1.1.1
+  Downloaded arrayvec v0.7.8
+  Downloaded bincode v2.0.1
+  Downloaded rustc_version v0.4.1
+  Downloaded base64 v0.22.1
+  Downloaded calloop v0.13.0
+  Downloaded cargo-platform v0.1.9
+  Downloaded color_quant v1.1.0
+  Downloaded crossbeam-channel v0.5.16
+  Downloaded defmt v1.1.1
+  Downloaded proc-macro-crate v3.5.0
+  Downloaded serde_derive v1.0.229
+  Downloaded bytemuck v1.25.2
+  Downloaded cc v1.4.4
+  Downloaded crossbeam-utils v0.8.22
+  Downloaded crunchy v0.2.4
+  Downloaded base64 v0.23.1
+  Downloaded bytes v1.12.1
+  Downloaded camino v1.2.5
+  Downloaded const-random v0.1.18
+  Downloaded darling v0.23.0
+  Downloaded darling_macro v0.23.0
+  Downloaded option-ext v0.2.0
+  Downloaded ref-cast v1.0.27
+  Downloaded cfg-if v1.0.4
+  Downloaded calloop v0.14.5
+  Downloaded codespan-reporting v0.13.1
+  Downloaded const-field-offset-macro v0.2.1
+  Downloaded const-random-macro v0.1.16
+  Downloaded cssparser-macros v0.6.1
+  Downloaded serde_json v1.0.151
+  Downloaded bs58 v0.5.1
+  Downloaded cookie v0.18.2
+  Downloaded data-url v0.3.2
+  Downloaded owned_ttf_parser v0.25.1
+  Downloaded proc-macro-crate v2.0.2
+  Downloaded scoped-tls v1.0.1
+  Downloaded serde_derive_internals v0.29.1
+  Downloaded polycool v0.4.0
+  Downloaded same-file v1.0.6
+  Downloaded pin-weak v1.1.0
+  Downloaded renderdoc-sys v1.1.0
+  Downloaded pango v0.18.3
+  Downloaded parking_lot_core v0.9.12
+  Downloaded phf v0.13.1
+  Downloaded rustversion v1.0.23
+  Downloaded bit-vec v0.9.1
+  Downloaded block-buffer v0.10.4
+  Downloaded clang-sys v1.9.1
+  Downloaded powerfmt v0.2.0
+  Downloaded precomputed-hash v0.1.1
+  Downloaded chrono v0.4.45
+  Downloaded crossbeam-deque v0.8.8
+  Downloaded lazy_static v1.5.1
+  Downloaded tree_magic_mini v3.2.2
+  Downloaded windows-collections v0.3.2
+  Downloaded once_cell v1.21.4
+  Downloaded openssl-probe v0.2.1
+  Downloaded pango-sys v0.18.0
+  Downloaded parlance v0.1.1
+  Downloaded phf_macros v0.13.1
+  Downloaded piper v0.2.5
+  Downloaded potential_utf v0.1.6
+  Downloaded rayon v1.12.0
+  Downloaded rhai_codegen v3.2.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded schemars_derive v0.8.22
+  Downloaded serde-untagged v0.1.9
+  Downloaded bytemuck_derive v1.12.1
+  Downloaded cexpr v0.6.0
+  Downloaded ctor-proc-macro v0.0.7
+  Downloaded darling_core v0.23.0
+  Downloaded dbus-tree v0.9.2
+  Downloaded iana-time-zone v0.1.65
+  Downloaded icu_decimal_data v2.3.0
+  Downloaded libloading v0.7.4
+  Downloaded lyon_extra v1.1.0
+  Downloaded no-std-compat v0.4.1
+  Downloaded toml_edit v0.20.2
+  Downloaded unicode-bidi v0.3.18
+  Downloaded unicode-xid v0.2.6
+  Downloaded ordered-float v5.5.1
+  Downloaded parley_data v0.11.1
+  Downloaded pin-project-internal v1.1.13
+  Downloaded pin-project-lite v0.2.17
+  Downloaded proc-macro2 v1.0.107
+  Downloaded resvg v0.48.1
+  Downloaded rspolib v0.1.2
+  Downloaded schemars v0.8.22
+  Downloaded serde_core v1.0.229
+  Downloaded strum v0.28.0
+  Downloaded bindgen v0.72.1
+  Downloaded bitflags v2.13.1
+  Downloaded borsh v1.8.1
+  Downloaded cairo-rs v0.18.5
+  Downloaded cfb v0.7.3
+  Downloaded cfg-expr v0.15.8
+  Downloaded const-field-offset v0.2.1
+  Downloaded cssparser v0.36.0
+  Downloaded ctor v0.10.1
+  Downloaded dbus v0.9.12
+  Downloaded parking_lot v0.12.5
+  Downloaded schemars v0.9.0
+  Downloaded fdeflate v0.3.7
+  Downloaded imgref v1.12.3
+  Downloaded native-tls v0.2.18
+  Downloaded openssl-sys v0.9.117
+  Downloaded plist v1.10.0
+  Downloaded polling v3.11.0
+  Downloaded prettyplease v0.2.37
+  Downloaded rayon-core v1.13.0
+  Downloaded sctk-adwaita v0.10.1
+  Downloaded selectors v0.36.1
+  Downloaded tauri-plugin v2.6.3
+  Downloaded allocator-api2 v0.2.21
+  Downloaded grid v1.0.1
+  Downloaded keyboard-types v0.7.0
+  Downloaded unty v0.0.4
+  Downloaded weezl v0.1.12
+  Downloaded crossbeam-epoch v0.9.21
+  Downloaded zerovec v0.11.8
+  Downloaded futures-macro v0.3.34
+  Downloaded hex v0.4.3
+  Downloaded serde v1.0.229
+  Downloaded brotli-decompressor v5.0.3
+  Downloaded clap v2.34.0
+  Downloaded ash v0.38.0+1.3.281
+  Downloaded bitflags v1.3.2
+  Downloaded cargo_toml v0.22.3
+  Downloaded zvariant v5.15.0
+  Downloaded getrandom v0.3.4
+  Downloaded io-lifetimes v1.0.11
+  Downloaded lyon_geom v1.0.20
+  Downloaded deranged v0.5.8
+  Downloaded icu_normalizer_data v2.3.0
+  Downloaded unic-common v0.9.0
+  Downloaded wgpu v30.0.1
+  Downloaded windows-future v0.3.2
+  Downloaded javascriptcore-rs-sys v1.1.1
+  Downloaded spin v0.5.2
+  Downloaded itoa v1.0.18
+  Downloaded toml_datetime v0.6.3
+  Downloaded windows-implement v0.60.2
+  Downloaded windows-interface v0.59.3
+  Downloaded cairo-sys-rs v0.18.2
+  Downloaded parley v0.11.1
+  Downloaded string_cache_codegen v0.6.1
+  Downloaded i-slint-backend-testing v1.18.1
+  Downloaded adler2 v2.0.1
+  Downloaded unic-char-range v0.9.0
+  Downloaded vtable v0.5.0
+  Downloaded wayland-csd-frame v0.3.0
+  Downloaded wayland-cursor v0.31.14
+  Downloaded strsim v0.8.0
+  Downloaded semver v1.0.28
+  Downloaded soup3 v0.5.0
+  Downloaded idna_adapter v1.2.2
+  Downloaded windows-numerics v0.3.1
+  Downloaded windows-result v0.4.1
+  Downloaded tauri-runtime v2.11.3
+  Downloaded windows-core v0.62.2
+  Downloaded zerovec-derive v0.11.6
+  Downloaded png v0.17.16
+  Downloaded toml v0.9.12+spec-1.1.0
+  Downloaded i-slint-core-macros v1.18.1
+  Downloaded minimal-lexical v0.2.1
+  Downloaded unicode-ident v1.0.24
+  Downloaded xkeysym v0.2.1
+  Downloaded tauri-macros v2.6.3
+  Downloaded gdk-pixbuf-sys v0.18.0
+  Downloaded litrs v1.0.1
+  Downloaded utf8_iter v1.0.4
+  Downloaded futures-io v0.3.34
+  Downloaded regex v1.13.1
+  Downloaded servo_arc v0.4.3
+  Downloaded strsim v0.11.1
+  Downloaded field-offset v0.3.6
+  Downloaded heck v0.5.0
+  Downloaded serde_repr v0.1.21
+  Downloaded unicase v2.10.0
+  Downloaded unic-char-property v0.9.0
+  Downloaded futures-lite v2.6.1
+  Downloaded png v0.18.1
+  Downloaded futures-sink v0.3.34
+  Downloaded unicode-linebreak v0.1.5
+  Downloaded serialize-to-javascript-impl v0.1.2
+  Downloaded unicode-vo v0.1.0
+  Downloaded ureq v2.12.1
+  Downloaded wayland-client v0.31.15
+  Downloaded windows-link v0.2.1
+  Downloaded xkbcommon-dl v0.4.2
+  Downloaded alloc-no-stdlib v2.0.4
+  Downloaded serde_spanned v0.6.9
+  Downloaded ahash v0.8.12
+  Downloaded hashbrown v0.15.5
+  Downloaded ico v0.5.0
+  Downloaded version_check v0.9.5
+  Downloaded pulldown-cmark v0.13.5
+  Downloaded dirs v4.0.0
+  Downloaded heck v0.4.1
+  Downloaded i-slint-renderer-software v1.18.1
+  Downloaded zerotrie v0.2.5
+  Downloaded gdkwayland-sys v0.18.2
+  Downloaded libappindicator v0.9.0
+  Downloaded toml_datetime v0.7.5+spec-1.1.0
+  Downloaded udev v0.9.3
+  Downloaded unicode-script v0.5.8
+  Downloaded urlpattern v0.3.0
+  Downloaded serde_with_macros v3.22.0
+  Downloaded defmt-parser v1.0.0
+  Downloaded i-slint-renderer-skia v1.18.1
+  Downloaded url v2.5.8
+  Downloaded vec_map v0.8.2
+  Downloaded wayland-backend v0.3.17
+  Downloaded hashbrown v0.17.1
+  Downloaded petgraph v0.8.3
+  Downloaded serde_spanned v1.1.1
+  Downloaded event-listener-strategy v0.5.4
+  Downloaded fastrand v2.5.0
+  Downloaded filetime v0.2.29
+  Downloaded gdk-pixbuf v0.18.5
+  Downloaded litemap v0.8.3
+  Downloaded miniz_oxide v0.9.1
+  Downloaded uuid v1.26.0
+  Downloaded zbus_names v4.3.4
+  Downloaded portable-atomic v1.15.0
+  Downloaded smol_str v0.2.2
+  Downloaded tauri-codegen v2.6.3
+  Downloaded tiny-xlib v0.2.5
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded alloc-stdlib v0.2.4
+  Downloaded openssl v0.10.81
+  Downloaded quick-xml v0.41.0
+  Downloaded ksni v0.2.2
+  Downloaded zune-core v0.5.3
+  Downloaded gdk-sys v0.18.2
+  Downloaded idna v1.1.0
+  Downloaded moxcms v0.8.1
+  Downloaded svgtypes v0.16.1
+  Downloaded mio v1.2.3
+  Downloaded smartstring v1.0.1
+  Downloaded tauri-plugin-single-instance v2.4.4
+  Downloaded digest v0.10.7
+  Downloaded event-listener v5.4.2
+  Downloaded form_urlencoded v1.2.2
+  Downloaded unicode-segmentation v1.13.3
+  Downloaded gif v0.14.2
+  Downloaded kurbo v0.13.1
+  Downloaded version-compare v0.2.1
+  Downloaded zmij v1.0.23
+  Downloaded enumflags2_derive v0.7.12
+  Downloaded unic-ucd-ident v0.9.0
+  Downloaded futures-executor v0.3.34
+  Downloaded memoffset v0.9.1
+  Downloaded itertools v0.15.0
+  Downloaded usvg v0.48.1
+  Downloaded serialize-to-javascript v0.1.2
+  Downloaded embed-resource v3.0.11
+  Downloaded futures-util v0.3.34
+  Downloaded icu_decimal v2.3.0
+  Downloaded toml_datetime v1.1.1+spec-1.1.0
+  Downloaded zerofrom-derive v0.1.7
+  Downloaded zune-jpeg v0.5.15
+  Downloaded rustix v1.1.4
+  Downloaded simplecss v0.2.2
+  Downloaded soup3-sys v0.5.0
+  Downloaded tiny-skia-path v0.12.0
+  Downloaded image v0.25.10
+  Downloaded mime v0.3.17
+  Downloaded wayland-scanner v0.31.11
+  Downloaded gdk v0.18.2
+  Downloaded icu_provider v2.3.1
+  Downloaded dirs v6.0.0
+  Downloaded gdkx11 v0.18.2
+  Downloaded gdkx11-sys v0.18.2
+  Downloaded libappindicator-sys v0.9.0
+  Downloaded typeid v1.0.3
+  Downloaded walkdir v2.5.0
+  Downloaded ab_glyph_rasterizer v0.1.10
+  Downloaded sha2 v0.10.9
+  Downloaded unic-ucd-version v0.9.0
+  Downloaded vtable-macro v0.5.0
+  Downloaded foreign-types-shared v0.1.1
+  Downloaded glutin-winit v0.5.0
+  Downloaded tiny-skia v0.11.4
+  Downloaded getrandom v0.2.17
+  Downloaded rustix v0.38.44
+  Downloaded tiny-keccak v2.0.2
+  Downloaded wgpu-naga-bridge v30.0.1
+  Downloaded tinystr v0.8.4
+  Downloaded dlopen2_derive v0.4.3
+  Downloaded imagesize v0.15.0
+  Downloaded unicode-width v0.1.14
+  Downloaded vcpkg v0.2.15
+  Downloaded siphasher v1.0.3
+  Downloaded tiny-skia v0.12.0
+  Downloaded dunce v1.0.5
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded sys-locale v0.3.2
+  Downloaded libloading v0.8.9
+  Downloaded tokio-macros v2.7.2
+  Downloaded foreign-types v0.3.2
+  Downloaded icu_locale_fallback_data v2.3.0
+  Downloaded synstructure v0.13.2
+  Downloaded typed-index-collections v3.5.0
+  Downloaded generic-array v0.14.7
+  Downloaded libseat v0.2.4
+  Downloaded aho-corasick v1.1.5
+  Downloaded futures-task v0.3.34
+  Downloaded naga-types v30.0.1
+  Downloaded strum_macros v0.28.0
+  Downloaded log v0.4.34
+  Downloaded lyon_path v1.0.19
+  Downloaded zerofrom v0.1.8
+  Downloaded endi v1.1.1
+  Downloaded gtk3-macros v0.18.2
+  Downloaded glutin_egl_sys v0.7.1
+  Downloaded wgpu-core-deps-windows-linux-android v30.0.1
+  Downloaded derive_more v2.1.1
+  Downloaded dirs-sys v0.5.0
+  Downloaded float-cmp v0.9.0
+  Downloaded fnv v1.0.7
+  Downloaded icu_locale_fallback v2.3.0
+  Downloaded smol_str v0.3.7
+  Downloaded annotate-snippets v0.12.17
+  Downloaded fontique v0.11.1
+  Downloaded system-deps v6.2.2
+  Downloaded yeslogic-fontconfig-sys v6.0.1
+  Downloaded dtor v0.8.1
+  Downloaded time-core v0.1.9
+  Downloaded drm-sys v0.8.1
+  Downloaded zerocopy-derive v0.8.57
+  Downloaded time-macros v0.2.32
+  Downloaded glutin_glx_sys v0.6.1
+  Downloaded indexmap v2.14.1
+  Downloaded infer v0.19.0
+  Downloaded zeno v0.3.3
+  Downloaded thiserror v2.0.20
+  Downloaded thiserror-impl v1.0.69
+  Downloaded gtk-sys v0.18.2
+  Downloaded rhai v1.26.1
+  Downloaded textwrap v0.11.0
+  Downloaded javascriptcore-rs v1.1.2
+  Downloaded memmap2 v0.9.12
+  Downloaded tracing-attributes v0.1.31
+  Downloaded lyon_algorithms v1.0.22
+  Downloaded regex-automata v0.4.18
+  Downloaded font-types v0.12.7
+  Downloaded image-webp v0.2.4
+  Downloaded toml v1.1.5+spec-1.1.0
+  Downloaded toml_edit v0.25.13+spec-1.1.0
+  Downloaded x11-dl v2.21.0
+  Downloaded tauri-plugin-autostart v2.5.1
+  Downloaded thin-vec v0.2.19
+  Downloaded tinyvec v1.12.0
+  Downloaded document-features v0.2.12
+  Downloaded enumflags2 v0.7.12
+  Downloaded icu_collections v2.3.0
+  Downloaded strict-num v0.1.1
+  Downloaded dlib v0.5.3
+  Downloaded equivalent v1.0.2
+  Downloaded x11 v2.21.0
+  Downloaded gobject-sys v0.18.0
+  Downloaded toml_edit v0.19.15
+  Downloaded spirv v0.4.0+sdk-1.4.341.0
+  Downloaded dtoa-short v0.3.5
+  Downloaded futures-core v0.3.34
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded yoke-derive v0.8.2
+  Downloaded gethostname v1.1.0
+  Downloaded input v0.10.0
+  Downloaded libseat-sys v0.2.0
+  Downloaded windows-threading v0.2.1
+  Downloaded slotmap v1.1.1
+  Downloaded softbuffer v0.4.8
+  Downloaded tauri-runtime-wry v2.11.4
+  Downloaded socket2 v0.6.5
+  Downloaded xmlwriter v0.1.0
+  Downloaded i-slint-core v1.18.1
+  Downloaded webkit2gtk-sys v2.0.2
+  Downloaded winnow v0.7.15
+  Downloaded zcheapstr v1.1.0
+  Downloaded i-slint-backend-qt v1.18.1
+  Downloaded unicode-width v0.2.3
+  Downloaded writeable v0.6.4
+  Downloaded toml v0.8.2
+  Downloaded dtor v0.3.0
+  Downloaded yoke v0.8.3
+  Downloaded dirs-sys v0.3.7
+  Downloaded dpi v0.1.2
+  Downloaded either v1.19.0
+  Downloaded fixed_decimal v0.7.3
+  Downloaded tauri-build v2.6.3
+  Downloaded icu_normalizer v2.3.0
+  Downloaded jobserver v0.1.35
+  Downloaded wl-clipboard-rs v0.9.5
+  Downloaded string_cache v0.9.0
+  Downloaded windows-strings v0.5.1
+  Downloaded xcursor v0.3.11
+  Downloaded static_assertions v1.1.0
+  Downloaded errno v0.3.14
+  Downloaded icu_properties v2.3.0
+  Downloaded glutin v0.32.3
+  Downloaded new_debug_unreachable v1.0.6
+  Downloaded zvariant_utils v4.2.0
+  Downloaded smallvec v1.16.5
+  Downloaded dtoa v1.0.11
+  Downloaded icu_plurals_data v2.3.0
+  Downloaded json-patch v3.0.1
+  Downloaded toml_writer v1.1.2+spec-1.1.0
+  Downloaded ident_case v1.0.1
+  Downloaded zvariant_derive v5.15.0
+  Downloaded thiserror v1.0.69
+  Downloaded drm-ffi v0.9.1
+  Downloaded displaydoc v0.2.7
+  Downloaded serde_with v3.22.0
+  Downloaded snafu v0.8.9
+  Downloaded webkit2gtk v2.0.2
+  Downloaded gl_generator v0.14.0
+  Downloaded glob v0.3.4
+  Downloaded icu_locale_core v2.3.0
+  Downloaded indexmap v1.9.3
+  Downloaded downcast-rs v1.2.1
+  Downloaded miniz_oxide v0.8.9
+  Downloaded wgpu-hal v30.0.1
+  Downloaded muda v0.19.3
+  Downloaded thiserror-impl v2.0.20
+  Downloaded tiny-skia-path v0.11.4
+  Downloaded wayland-protocols-plasma v0.3.12
+  Downloaded flate2 v1.1.10
+  Downloaded markup5ever v0.38.0
+  Downloaded foldhash v0.1.5
+  Downloaded foldhash v0.2.0
+  Downloaded i-slint-backend-selector v1.18.1
+  Downloaded libudev-sys v0.1.4
+  Downloaded lock_api v0.4.14
+  Downloaded memchr v2.8.3
+  Downloaded drm v0.14.1
+  Downloaded swash v0.2.10
+  Downloaded xkbcommon v0.9.0
+  Downloaded dlopen2 v0.8.2
+  Downloaded shlex v1.3.0
+  Downloaded futures v0.3.34
+  Downloaded tendril v0.5.1
+  Downloaded xml-rs v0.8.29
+  Downloaded snafu-derive v0.8.9
+  Downloaded derive_more-impl v2.1.1
+  Downloaded hashbrown v0.14.5
+  Downloaded ttf-parser v0.25.1
+  Downloaded x11rb v0.13.2
+  Downloaded slint v1.18.1
+  Downloaded syn v3.0.4
+  Downloaded dtor-proc-macro v0.0.6
+  Downloaded euclid v0.22.14
+  Downloaded futures-channel v0.3.34
+  Downloaded i-slint-backend-winit v1.18.1
+  Downloaded khronos_api v3.1.0
+  Downloaded toml_parser v1.1.3+spec-1.1.0
+  Downloaded web_atoms v0.2.6
+  Downloaded xattr v1.6.1
+  Downloaded zbus_macros v5.19.0
+  Downloaded zerocopy v0.8.57
+  Downloaded zlib-rs v0.6.7
+  Downloaded shlex v2.0.1
+  Downloaded text-size v1.1.1
+  Downloaded gpu-allocator v0.28.0
+  Downloaded half v2.7.1
+  Downloaded htmlparser v0.2.1
+  Downloaded tray-icon v0.24.2
+  Downloaded target-lexicon v0.12.16
+  Downloaded time v0.3.55
+  Downloaded dom_query v0.27.0
+  Downloaded jsonptr v0.6.3
+  Downloaded slint-build v1.18.1
+  Downloaded slint-interpreter v1.18.1
+  Downloaded slint-macros v1.18.1
+  Downloaded tauri-winres v0.3.6
+  Downloaded libm v0.2.16
+  Downloaded linebender_resource_handle v0.1.1
+  Downloaded nom v7.1.3
+  Downloaded smithay-client-toolkit v0.19.2
+  Downloaded spin_on v0.1.1
+  Downloaded dyn-clone v1.0.20
+  Downloaded natord v1.0.9
+  Downloaded webbrowser v1.2.5
+  Downloaded simd-adler32 v0.3.10
+  Downloaded nom v8.0.0
+  Downloaded erased-serde v0.4.10
+  Downloaded glib-sys v0.18.1
+  Downloaded wayland-sys v0.31.11
+  Downloaded icu_plurals v2.3.0
+  Downloaded tracing-core v0.1.36
+  Downloaded signal-hook-registry v1.4.8
+  Downloaded tauri v2.11.5
+  Downloaded hashbrown v0.12.3
+  Downloaded html5ever v0.38.0
+  Downloaded yazi v0.2.1
+  Downloaded pxfm v0.1.30
+  Downloaded gio-sys v0.18.1
+  Downloaded input-sys v1.19.0
+  Downloaded jiff-core v0.1.0
+  Downloaded wayland-protocols-wlr v0.3.12
+  Downloaded fontdb v0.24.0
+  Downloaded itertools v0.13.0
+  Downloaded wayland-protocols v0.32.13
+  Downloaded winnow v1.0.4
+  Downloaded getrandom v0.4.3
+  Downloaded gio v0.18.4
+  Downloaded i-slint-backend-linuxkms v1.18.1
+  Downloaded wry v0.55.1
+  Downloaded tauri-utils v2.9.3
+  Downloaded http v1.5.0
+  Downloaded winnow v0.5.40
+  Downloaded slab v0.4.12
+  Downloaded taffy v0.10.1
+  Downloaded glib v0.18.5
+  Downloaded glow v0.18.0
+  Downloaded wgpu-types v30.0.1
+  Downloaded zbus v5.19.0
+  Downloaded parking v2.2.1
+  Downloaded i-slint-compiler v1.18.1
+  Downloaded icu_properties_data v2.3.0
+  Downloaded tracing v0.1.44
+  Downloaded tao v0.35.3
+  Downloaded drm-fourcc v2.2.0
+  Downloaded tar v0.4.46
+  Downloaded rustc-hash v1.1.0
+  Downloaded skia-bindings v0.153.3
+  Downloaded syn v2.0.119
+  Downloaded glib-macros v0.18.5
+  Downloaded syn v1.0.109
+  Downloaded harfrust v0.12.0
+  Downloaded winit v0.30.13
+  Downloaded gtk v0.18.2
+  Downloaded i-slint-common v1.18.1
+  Downloaded libdbus-sys v0.2.7
+  Downloaded skia-safe v0.153.3
+  Downloaded brotli v8.0.4
+  Downloaded wgpu-core v30.0.1
+  Downloaded skrifa v0.44.0
+  Downloaded x11rb-protocol v0.13.2
+  Downloaded naga v30.0.1
+  Downloaded typenum v1.20.1
+  Downloaded jiff v0.2.35
+  Downloaded libc v0.2.189
+  Downloaded tokio v1.53.1
+  Downloaded fixedbitset v0.5.7
+  Downloaded linux-raw-sys v0.4.15
+  Downloaded linux-raw-sys v0.9.4
+  Downloaded icu_segmenter_data v2.3.0
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded icu_segmenter v2.3.0
+  Downloaded nix v0.31.3
+  Downloaded windows v0.62.2
+   Compiling quote v1.0.47
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.229
+   Compiling pkg-config v0.3.34
+error: linker `cc` not found
+  |
+  = note: No such file or directory (os error 2)
+
+error: could not compile `quote` (build script) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `proc-macro2` (build script) due to 1 previous error
+error: could not compile `serde_core` (build script) due to 1 previous error
+error: Bad exit status from /var/tmp/rpm-tmp.VIbjwU (%build)
+
+RPM build errors:
+    Bad exit status from /var/tmp/rpm-tmp.VIbjwU (%build)
