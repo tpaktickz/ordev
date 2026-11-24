@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=OpenRevo
+Name[zh_CN]=OpenRevo 控制中心
+GenericName=Laptop Control Center
+GenericName[zh_CN]=笔记本控制中心
+Comment=Hardware control center for Mechrevo and Tongfang laptops
+Comment[zh_CN]=机械革命 / 同方笔记本硬件控制中心
+Exec=open-revo
+Icon=open-revo
+Terminal=false
+Categories=System;HardwareSettings;
+Keywords=laptop;fan;power;keyboard;rgb;profile;mechrevo;tongfang;
+StartupWMClass=open-revo
+# The main panel is a frameless Slint surface; the dashboard is 1120x760 and the
+# drawer 395x632. Declaring neither lets the compositor size it.
+SingleMainWindow=true

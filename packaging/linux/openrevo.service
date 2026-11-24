@@ -1,0 +1,22 @@
+[Unit]
+Description=OpenRevo hardware control daemon
+Documentation=https://github.com/faintonce/open-revo
+# The daemon serves the tray icon and the hotkey watcher, so it must come up with
+# the graphical session rather than with multi-user.target.
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+# No --visible: without it the app stays in zero-footprint standby (tray icon
+# only) and spawns the main window on the first tray click. That is the same
+# contract `--minimized` means on the Windows autostart entry.
+ExecStart=/usr/bin/open-revo
+Restart=on-failure
+RestartSec=3
+# A Wayland session exports these in the user manager already; X11 sessions do
+# not always, and the app needs the display to show its own windows.
+PassEnvironment=WAYLAND_DISPLAY DISPLAY XDG_CURRENT_DESKTOP XDG_SESSION_TYPE XDG_RUNTIME_DIR
+
+[Install]
+WantedBy=graphical-session.target

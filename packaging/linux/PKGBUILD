@@ -1,0 +1,77 @@
+pkgname=openrevo-git
+pkgver=r0.9.8.291652f
+pkgrel=1
+pkgdesc="Lightweight control center for Mechrevo / Tongfang laptops (Wayland and X11 port)"
+arch=('x86_64' 'aarch64')
+url="https://github.com/faintonce/open-revo"
+license=('GPL-3.0-or-later')
+depends=(
+  'webkit2gtk-4.1'
+  'gtk3'
+  'librsvg'
+  'libappindicator-gtk3'
+  'hicolor-icon-theme'
+  'openssl'
+)
+makedepends=('rust' 'cargo' 'nodejs' 'pnpm')
+options=('!lto')
+_commit=291652f
+source=("$pkgname::git+https://github.com/tpaktickz/ordev.git#commit=$_commit")
+sha256sums=('SKIP')
+
+pkgver() {
+  cd "$srcdir/$pkgname"
+  local stamp
+  stamp=$(git log -1 --format=%cd --date=short | tr -d '-')
+  printf 'r%s.%s' "$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)" "${stamp}"
+}
+
+prepare() {
+  cd "$srcdir/$pkgname"
+  # The lockfile pins the registry the author used; keep it frozen so a build here
+  # is reproducible from the same commit.
+  pnpm install --frozen-lockfile
+}
+
+build() {
+  cd "$srcdir/$pkgname"
+
+  # The webview shell is a separate Vite bundle. tauri would run this itself via
+  # beforeBuildCommand, but doing it here keeps the cargo invocation single-shot
+  # and lets a packaging failure point at the right step.
+  pnpm build
+
+  export CARGO_TARGET_DIR="$srcdir/target"
+  cd src-tauri
+  cargo build --frozen --release --bin open-revo
+}
+
+package() {
+  cd "$srcdir/$pkgname"
+
+  install -Dm755 "$srcdir/target/release/open-revo" "$pkgdir/usr/bin/open-revo"
+
+  install -Dm644 packaging/linux/open-revo.desktop \
+    "$pkgdir/usr/share/applications/open-revo.desktop"
+
+  for size in 32 64 128; do
+    install -Dm644 "src-tauri/icons/${size}x${size}.png" \
+      "$pkgdir/usr/share/icons/hicolor/${size}x${size}/apps/open-revo.png"
+  done
+  install -Dm644 src-tauri/icons/128x128@2x.png \
+    "$pkgdir/usr/share/icons/hicolor/256x256/apps/open-revo.png"
+
+  # udev rules, the ec_sys module parameter and the modules-load file are one
+  # unit: the rule file alone leaves every bank-0 write silently failing.
+  install -Dm644 packaging/linux/60-openrevo.rules \
+    "$pkgdir/usr/lib/udev/rules.d/60-openrevo.rules"
+  install -Dm644 packaging/linux/modprobe-openrevo.conf \
+    "$pkgdir/usr/lib/modprobe.d/openrevo.conf"
+  install -Dm644 packaging/linux/modules-load-openrevo.conf \
+    "$pkgdir/usr/lib/modules-load.d/openrevo.conf"
+
+  install -Dm644 packaging/linux/openrevo.service \
+    "$pkgdir/usr/lib/systemd/user/openrevo.service"
+
+  install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}
