@@ -224,7 +224,7 @@ pub fn processes() -> &'static dyn ProcessPort;
 
 ### P4.5 主界面：Slint + 自由缩放
 
-现状（`crates/openrevo-main/ui/main_window.slint:14-28`）：
+现状（`crates/openrevo-main/ui/main_window.slint:14-28`，改动前）：
 
 ```slint
 export component MainWindow inherits Window {
@@ -238,14 +238,11 @@ export component MainWindow inherits Window {
 
 目标：**界面结构照原作者的 Slint，尺寸改成"初始值 + 可缩放 + 有下限"**。
 
-1. 尺寸语义：
-   - 保留 `is_expanded` 作为"默认形态"：首次显示仍按 395×632 / 1120×760 起。
-   - 但把硬绑定改成 `in-out property <length> win_width / win_height`，初始由 `is_expanded` 决定，之后**由用户拖拽驱动**；`is_expanded` 切换只在用户没手动改过尺寸时生效（加 `user_resized: bool`）。
-   - 加 `min-width` / `min-height`（抽屉 320×480，仪表盘 900×600），避免 UI 崩坏。
+1. 尺寸语义 —— **已落地**：`width`/`height` 的 `is_expanded ? 1120px : 395px` 绑定彻底删除，改为 `resize-border-width: 6px` + `min-width: 320px` + `min-height: 480px`；初始尺寸在 `crates/openrevo-main/src/lib.rs` 里 `window.window().set_size(LogicalSize)` 一次给足，之后的形态切换仍走 `window_linux.rs::expand_native_window` / `align_mini_drawer_to_tray`（同样只调 `set_size`），因为不再有绑定，用户拖出来的尺寸不会被弹回。原计划里的 `user_resized` 标志与 `win_width`/`win_height` 属性因此省掉。
 2. 布局：`DrawerView` / `FullDashboard` 已经是 `width:100%; height:100%` 跟着根走，内部绝大多数是百分比与 layout，只需排查 `grep "width: [0-9]"` 命中的少数固定宽度（`sidebar.slint` 8 处）改成 `min-width`/弹性。
-3. 缩放入口（Wayland 没有服务端边框就没有拖拽区）：
-   - 首选：`slint` 的 `unstable-winit-030` + `winit::window::Window::drag_resize_window(ResizeDirection)`，在 Slint 里自绘 8 个透明热区（左右上下 + 四角），按下时调 resize。这是 Wayland 上唯一能自定义 CSD 缩放手势的路径。
-   - 兜底：Linux 上把 `no-frame` 在 X11 下关掉（让 WM 画边框），Wayland 下若脚本检测到 `XDG_SESSION_TYPE=wayland` 且 CSD 不可用，就给一个 KDE 窗口规则提示（用户可右键标题栏→更多操作→调整大小）。
+3. 缩放入口 —— **已落地，且不需要自绘热区**。Slint 1.18 的 `Window.resize-border-width` 是 winit 原生能力：`i-slint-backend-winit/src/winitwindowadapter.rs:1449` 在 `CursorMoved` 里用 `handle_cursor_move_for_resize(.., resize_border_width())` 算出方向，左键按下时 `handle_resize()` 调 winit 的 `drag_resize_window`。所以只要 `resize-border-width: 6px` + 不绑定 width/height 即可，`unstable-winit-030` 与手写协议都不用开。
+   - 实测约束：绑定 `width`/`height` 会让 winit 认为窗口固定尺寸，热区失效 —— 这是必须移除绑定的真正原因。
+   - 兜底：若某些合成器忽略 `xdg_toplevel.resize`，用户仍可用 Super+右键拖拽（KWin 内置），无需代码。
 4. 圆角/透明：`background: transparent` + Windows 的 DWM 圆角在 Linux 无对应物；Wayland 上由合成器按 `rounded-corner`（KWin 有 `BorderRadius` 规则）或自绘。不要在 Linux 路径调用任何 `Dwm*`。
 5. Windows 专属代码隔离：`crates/openrevo-main/src/lib.rs:3` 直接 `use windows::Win32::UI::WindowsAndMessaging::{ShowWindow, SW_HIDE};`，`src/window.rs` 全文是 HWND 子类化。二者都要 `#[cfg(windows)]`，Linux 提供空实现（`apply_window_decorations`、`find_thread_hwnd`、`align_mini_drawer_to_tray`、`expand_native_window` 等同名 no-op），保证调用点零改动。
 

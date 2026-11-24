@@ -60,6 +60,15 @@ pub fn run_main_standalone() {
     // Register all callbacks by domain
     callbacks::register_all(&window, ui_weak.clone(), hwnd_holder.clone());
 
+    // Frameless toplevel with no size binding in the markup: give it a sane size
+    // before the first frame so the compositor never sees the default 800x600.
+    // Later mode snaps go through window_linux.rs / window_win.rs, which also
+    // only ever call `set_size` — so a user resize survives until the next snap.
+    window.window().set_size(slint::LogicalSize::new(
+        if start_expanded { 1120.0 } else { 395.0 },
+        if start_expanded { 760.0 } else { 632.0 },
+    ));
+
     let _ = window.show();
 
     // Synchronously capture HWND and configure visibility/position immediately

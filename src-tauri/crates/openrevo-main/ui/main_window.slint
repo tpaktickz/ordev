@@ -24,8 +24,15 @@ export component MainWindow inherits Window {
     in-out property <string> update_feedback: "";
     in-out property <string> update_feedback_type: "";
 
-    width: is_expanded ? 1120px : 395px;
-    height: is_expanded ? 760px : 632px;
+    // Free resize: width/height are deliberately NOT bound to the expand state.
+    // Binding them makes the toplevel fixed-size, so the compositor cannot
+    // resize it and `resize-border-width` has nothing to drag. The initial size
+    // and every mode snap come from Rust (`window.set_size` in lib.rs and
+    // window_linux.rs/window_win.rs), which leaves the user free to resize the
+    // window afterwards.
+    resize-border-width: 6px;
+    min-width: 320px;
+    min-height: 480px;
 
     // --- State properties ---
     in-out property <int> theme_mode <=> AppTheme.theme_mode;

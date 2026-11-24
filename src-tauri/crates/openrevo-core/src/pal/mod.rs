@@ -17,6 +17,7 @@ pub mod keymap;
 pub mod power;
 pub mod process;
 pub mod reg;
+pub mod tongfang;
 pub mod xdg;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

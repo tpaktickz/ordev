@@ -575,15 +575,29 @@ mod tests {
 }
 
 
-/// Linux: power-profiles-daemon is the cross-desktop switch (UPower front-end is
-/// `powerprofilesctl`). Windows' overlay GUIDs have no equivalent here.
+/// Linux: two stacked paths, both cross-desktop.
+///
+/// The kernel's ACPI `platform_profile` knob is preferred — it is what the
+/// `tongfang-mifs-wmi` driver (and `platform_profile` aware firmwares) publish,
+/// it needs no daemon, and it is what the EC actually keys the fan curve off.
+/// `power-profiles-daemon` is the fallback for machines whose firmware has no
+/// profile table but whose distro still exposes the standard D-Bus switch.
 #[cfg(not(windows))]
 pub fn set_windows_power_overlay(ui_mode: u8) -> Result<(), String> {
-    let profile = match ui_mode {
-        1 => "power-saver",
-        3 => "performance",
-        _ => "balanced",
+    let (acpi_prefs, profile): (&[&str], &str) = match ui_mode {
+        1 => (&["quiet", "low-power"], "power-saver"),
+        3 => (&["performance", "balanced"], "performance"),
+        _ => (&["balanced", "quiet"], "balanced"),
     };
+    if let Some(applied) = crate::pal::tongfang::set_platform_profile(acpi_prefs) {
+        crate::log_info!(
+            "POWER_MODE",
+            "platform_profile set to {} (ui mode {})",
+            applied,
+            ui_mode
+        );
+        return Ok(());
+    }
     let out = crate::pal::process::command("powerprofilesctl")
         .args(["set", profile])
         .output()

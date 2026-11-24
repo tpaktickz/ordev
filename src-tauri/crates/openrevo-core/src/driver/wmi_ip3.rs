@@ -37,12 +37,14 @@ mod stub {
         false
     }
 
-    pub fn ip3_set_keyboard_backlight_level(_level_idx: u8) -> bool {
-        false
+    /// Level index, not a raw duty cycle: the LED class node already accepts the
+    /// 0..=3 scale the UI speaks, so no EC PWM table is needed here.
+    pub fn ip3_set_keyboard_backlight_level(level_idx: u8) -> bool {
+        crate::pal::tongfang::set_backlight_level(level_idx)
     }
 
     pub fn ip3_get_keyboard_backlight_level() -> Option<u8> {
-        None
+        crate::pal::tongfang::read_backlight_level()
     }
 }
 

@@ -1,0 +1,62 @@
+# udev rules for OpenRevo
+
+Three device classes need rules, and each one exists for a different reason.
+
+`ec_sys` is a debugfs file, so it is not covered by udev at all — the module
+parameter and the permissions are handled in `modprobe.d/openrevo.conf` and by
+the `openrevo-ec` group. `hidraw` and `backlight` are covered here.
+
+Place as `/etc/udev/rules.d/60-openrevo.rules`, then:
+
+```sh
+sudo udevadm control --reload-rules
+sudo udevadm trigger --subsystem-match=hidraw
+sudo udevadm trigger --subsystem-match=backlight
+```
+
+Reloading is not enough on its own: the rules only apply to devices that are
+retriggered, and `uaccess` needs an active session, so log out and back in after
+installing.
+
+```udev
+# --- ITE 8291 class keyboard RGB controllers ---------------------------------
+# 048d:600b is what the per-key boards report; 048d:ce00 is the same controller
+# behind a different PID on newer chassis. Both speak the 0x33 report protocol
+# that driver/hid_ffi.rs drives. TAG uaccess hands the node to the logged-in
+# seat instead of requiring the input group for the raw HID path.
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="600b", TAG+="uaccess", MODE="0660"
+SUBSYSTEM=="hidraw", ATTRS{idVendor}=="048d", ATTRS{idProduct}=="ce00", TAG+="uaccess", MODE="0660"
+
+# --- Backlight ---------------------------------------------------------------
+# Writing /sys/class/backlight/*/brightness needs either the video group or
+# uaccess. The daemon runs as the user, so uaccess is the right tag.
+SUBSYSTEM=="backlight", TAG+="uaccess"
+
+# --- ACPI EC via ec_sys ------------------------------------------------------
+# ec_sys is debugfs, not udev, but the write_support parameter is required or the
+# module mounts read-only and every bank-0 write silently fails.
+# This is the matching modprobe.d file; keep them installed together.
+```
+
+The matching `modprobe.d` file (`/etc/modprobe.d/openrevo.conf`):
+
+```modprobe.conf
+options ec_sys write_support=1
+```
+
+`/etc/modules-load.d/openrevo.conf`:
+
+```text
+ec_sys
+```
+
+Note the privilege split that results:
+
+| channel | who needs what |
+| :--- | :--- |
+| `/dev/input/event*` | members of `input` (passive read, no grab) |
+| `/sys/kernel/debug/ec/ec_sys` | root (debugfs is 0700 even with the write parameter) |
+| ACPI EC ports `0x62`/`0x66` | root or `CAP_SYS_RAWIO` (`ioperm`) |
+| `/dev/hidraw*` | logged-in seat via `uaccess` |
+| `/sys/class/backlight/*` | logged-in seat via `uaccess` |
+| `/dev/rfkill` | root or `CAP_NET_ADMIN` |

@@ -47,6 +47,11 @@ impl MechrevoHardwareHAL for MechrevoHALImpl {
     }
 
     fn set_fan_boost(&self, active: bool) -> Result<(), HalError> {
+        // Prefer the kernel driver: when `tongfang-mifs-wmi` is loaded it owns the
+        // EC mailbox, and a competing write from userspace risks a lost command.
+        if crate::pal::tongfang::driver_present() && crate::pal::tongfang::set_fan_boost(active) {
+            return Ok(());
+        }
         let success = wmi_ec::set_fan_boost_hardware(active);
         if success {
             Ok(())
@@ -71,6 +76,10 @@ impl MechrevoHardwareHAL for MechrevoHALImpl {
     }
 
     fn read_fan_rpm(&self) -> Result<(u16, u16), HalError> {
+        // hwmon is one read per fan and cannot collide with our own EC traffic.
+        if let Some(rpm) = crate::pal::tongfang::read_fan_rpm() {
+            return Ok(rpm);
+        }
         let registers = [
             ec::ADDR_MAIN_FAN_RPM_B1,
             ec::ADDR_MAIN_FAN_RPM_B2,
@@ -85,6 +94,19 @@ impl MechrevoHardwareHAL for MechrevoHALImpl {
             }
         }
         Err(HalError::RegisterAccessFailed("Failed to batch read fan RPM".to_string()))
+    }
+
+    fn set_monochrome_backlight(&self, level: u8) -> Result<(), HalError> {
+        if crate::pal::tongfang::set_backlight_level(level) {
+            return Ok(());
+        }
+        Err(HalError::UnsupportedModel(
+            "No LED class node for the keyboard backlight (is tongfang-mifs-wmi loaded?)".to_string(),
+        ))
+    }
+
+    fn get_monochrome_backlight(&self) -> Option<u8> {
+        crate::pal::tongfang::read_backlight_level()
     }
 
     fn is_hardware_supported(&self) -> bool {
@@ -102,6 +124,13 @@ impl HardwareDriver for MechrevoHALImpl {
     }
 
     fn probe(&self) -> bool {
+        // The kernel module is proof of both halves at once: it only binds on a
+        // matching chassis, and it means the EC is reachable through sysfs. Skip
+        // the PROJECT_ID read in that case — it would race the kernel driver.
+        if crate::pal::tongfang::driver_present() {
+            crate::log_info!("HAL", "tongfang-mifs-wmi present: {}", crate::pal::tongfang::describe());
+            return true;
+        }
         crate::hal::platform_probe::is_tongfang_family()
             && wmi_ec::wmi_read_ec(ec::ADDR_PROJECT_ID).is_some()
     }
@@ -117,7 +146,27 @@ impl HardwareDriver for MechrevoHALImpl {
         }
     }
 
+    fn set_keyboard_effect(&self, effect: u8, r: u8, g: u8, b: u8) -> Result<(), HalError> {
+        // Kernel ABI effect ids: 0 off, 1 cyclic, 2 fixed, 3 custom. Anything else
+        // falls through to the EC colour write so per-key boards keep working.
+        let mapped = match effect {
+            0 => Some(0),
+            1 => Some(1),
+            3 => Some(3),
+            _ => Some(2),
+        };
+        if let Some(id) = mapped {
+            if crate::pal::tongfang::set_keyboard_effect(id) {
+                return Ok(());
+            }
+        }
+        self.set_keyboard_rgb(r, g, b)
+    }
+
     fn read_cpu_temp(&self) -> Result<u8, HalError> {
+        if let Some(temp) = crate::pal::tongfang::read_cpu_temp_celsius() {
+            return Ok(temp);
+        }
         let temp = crate::system::cpu_monitor::get_cpu_monitor().get_temp();
         if temp > 0 && temp < 125 {
             Ok(temp as u8)
