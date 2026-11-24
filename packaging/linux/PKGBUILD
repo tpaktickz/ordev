@@ -65,7 +65,7 @@ package() {
 
   install -Dm755 "$srcdir/target/release/open-revo" "$pkgdir/usr/bin/open-revo"
 
-  install -Dm644 packaging/linux/open-revo.desktop \
+  install -Dm644 packaging/linux/openrevo.desktop \
     "$pkgdir/usr/share/applications/open-revo.desktop"
 
   for size in 32 64 128; do

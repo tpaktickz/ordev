@@ -1,0 +1,43 @@
+name: Publish failure log
+description: >-
+  Force-push a failing step's log to an orphan ci-diag branch. The API endpoints
+  for run logs and artifacts both require a token; the contents API does not, so
+  a red run becomes readable instead of guessable.
+inputs:
+  log:
+    description: File the failing step teed its output into
+    required: false
+    default: /tmp/step.log
+  name:
+    description: File name to store it under
+    required: false
+    default: step
+runs:
+  using: composite
+  steps:
+    - name: Publish
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        LOG_PATH: ${{ inputs.log }}
+        LOG_NAME: ${{ inputs.name }}
+      run: |
+        set -uo pipefail
+        if [ ! -s "$LOG_PATH" ]; then
+          echo "no log at $LOG_PATH; nothing to publish"
+          exit 0
+        fi
+        cd "$RUNNER_TEMP"
+        rm -rf diag
+        git clone --depth 1 --quiet \
+          "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag
+        cd diag
+        git checkout --orphan ci-diag >/dev/null 2>&1 || true
+        git rm -rq --cached . >/dev/null 2>&1 || true
+        mkdir -p logs
+        cp "$LOG_PATH" "logs/${LOG_NAME}.log"
+        echo "publishing $(wc -l < "logs/${LOG_NAME}.log") lines from $LOG_PATH"
+        git add logs
+        git -c user.name=ci -c user.email=ci@localhost \
+          commit -qm "ci-diag: ${GITHUB_WORKFLOW} ${GITHUB_RUN_ID} failed" || exit 0
+        git push -fq origin ci-diag

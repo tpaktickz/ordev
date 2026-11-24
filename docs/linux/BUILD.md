@@ -48,6 +48,34 @@ cd packaging/linux
 makepkg -si
 ```
 
+## Packaging for other distributions
+
+Three formats are maintained, one per distribution, and all three build the same
+tree into the same file layout. Each lives next to the one it belongs to:
+
+| distribution | file | command |
+| :--- | :--- | :--- |
+| Arch | `packaging/linux/PKGBUILD` | `cd packaging/linux && makepkg -si` |
+| Debian, Ubuntu | `packaging/debian/` | `dpkg-buildpackage -b -us -uc -d` |
+| Fedora, RHEL | `packaging/rpm/openrevo.spec` | `rpmbuild -ba --define "_topdir $PWD/rpmbuild" --define "version X" packaging/rpm/openrevo.spec` |
+
+`packaging/debian/` and `packaging/rpm/` expect `debian/` at the top of a source
+tree or a `openrevo-<version>.tar.gz` in `SOURCES`, so both CI jobs export the
+tree with `git archive` first instead of building in place. The Debian changelog
+version is generated from `src-tauri/Cargo.toml` for the same reason: two copies
+of the version drift.
+
+Debian and Fedora ship a rustc below the dependency tree's floor (slint and wgpu
+both sit above 1.80), so both jobs take the toolchain from rustup and link it into
+`/usr/local/bin`; Arch's `rust` package is current and is used as packaged.
+
+The helper binary installs to `/usr/lib/openrevo/openrevo-ec-helper` in all three
+packages rather than `%{_libdir}`, because the polkit action pins that absolute
+path in `com.openrevo.ecwrite.policy` and the caller hardcodes it.
+
+`packaging/linux/openrevo.desktop` is the single desktop entry for all three;
+only its installed name differs.
+
 ## Permissions
 
 Three device classes are separate privileges, and the app degrades rather than

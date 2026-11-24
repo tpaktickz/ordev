@@ -70,7 +70,10 @@ jobs:
         # `--tests` also covers the privileged helper's input-validation contract.
         run: cargo test -p openrevo-core
 
-  package:
+  # One job per packaging format, each in its own distribution container, because
+  # a .deb and a .rpm have to be built against the library set of the distribution
+  # that will install them. Arch is first only because it was the original target.
+  package-arch:
     name: Build Arch package
     runs-on: ubuntu-24.04
     container: archlinux:base-devel
@@ -120,31 +123,132 @@ jobs:
             }
           ls -1 ./*.pkg.tar.zst
 
-      # Unauthenticated reads can reach the contents API, so a failing step ships
-      # its own log to a throwaway branch instead of a run artifact.
-      - name: Publish failure log
+      - uses: ./.github/actions/diag-log
         if: failure()
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          set -uo pipefail
-          cd "$RUNNER_TEMP"
-          git clone --depth 1 --quiet \
-            "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}" diag
-          cd diag
-          git checkout --orphan ci-diag >/dev/null 2>&1 || true
-          git rm -rq --cached . >/dev/null 2>&1 || true
-          mkdir -p logs
-          cp /tmp/step.log logs/step.log 2>/dev/null || true
-          cp /tmp/makepkg.log logs/makepkg.log 2>/dev/null || true
-          du -h logs/* 2>/dev/null || true
-          git add logs
-          git -c user.name=ci -c user.email=ci@localhost \
-            commit -qm "ci-diag: run ${GITHUB_RUN_ID} failed" || exit 0
-          git push -fq origin ci-diag
 
       - uses: actions/upload-artifact@v4
         with:
-          name: openrevo-linux-package
+          name: openrevo-arch
           path: packaging/linux/*.pkg.tar.zst
+          if-no-files-found: error
+
+  package-deb:
+    name: Build Debian package
+    runs-on: ubuntu-24.04
+    container: debian:bookworm
+    permissions:
+      contents: write
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            git ca-certificates curl build-essential debhelper devscripts dpkg-dev \
+            nodejs npm pkg-config \
+            libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev \
+            libayatana-appindicator3-dev libssl-dev libdbus-1-dev libudev-dev \
+            libsoup-3.0-dev zlib1g-dev
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build .deb
+        run: |
+          set -euxo pipefail
+          exec > >(tee /tmp/step.log) 2>&1
+          # Debian's rustc is far below what the dependency tree needs (slint and
+          # wgpu both sit above 1.80), so the toolchain comes from rustup and is
+          # linked into /usr/local/bin where debian/rules will find it.
+          export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+            sh -s -- -y --profile minimal
+          . "$CARGO_HOME/env"
+          ln -sf "$CARGO_HOME/bin/cargo" /usr/local/bin/cargo
+          ln -sf "$CARGO_HOME/bin/rustc" /usr/local/bin/rustc
+          ln -sf "$CARGO_HOME/bin/rustup" /usr/local/bin/rustup
+          cargo --version
+          npm install -g pnpm@10.32.1
+
+          VER=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          WORK="$RUNNER_TEMP/pkg/openrevo-$VER"
+          rm -rf "$RUNNER_TEMP/pkg"
+          mkdir -p "$WORK"
+          # Build from an exported tree: dpkg-buildpackage insists on debian/ at the
+          # top of the source directory, and the packaging lives in packaging/.
+          git archive HEAD | tar -x -C "$WORK"
+          cp -a packaging/debian "$WORK/debian"
+          # The changelog carries the version, so it is generated rather than kept
+          # in the tree and drifting from Cargo.toml.
+          cat > "$WORK/debian/changelog" <<EOF
+          openrevo ($VER-1) unstable; urgency=medium
+
+            * Automated build of $(git rev-parse --short HEAD).
+
+           -- openrevo packagers <packagers@openrevo.invalid>  $(date -R)
+          EOF
+          sed -i 's/^          //' "$WORK/debian/changelog"
+          cd "$WORK"
+          # -d: build-dependency versions are checked by the job above, and the
+          # container's apt state does not satisfy dpkg's exact requirements.
+          dpkg-buildpackage -b -us -uc -d
+          ls -l "$RUNNER_TEMP"/pkg/*.deb
+
+      - uses: ./.github/actions/diag-log
+        if: failure()
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openrevo-deb
+          path: ${{ runner.temp }}/pkg/*.deb
+          if-no-files-found: error
+
+  package-rpm:
+    name: Build Fedora package
+    runs-on: ubuntu-24.04
+    container: fedora:41
+    permissions:
+      contents: write
+    steps:
+      - name: Install build dependencies
+        run: |
+          dnf -y install git tar curl rpm-build nodejs npm pkgconf-pkg-config \
+            webkit2gtk4.1-devel gtk3-devel librsvg2-devel libappindicator-gtk3-devel \
+            openssl-devel dbus-devel systemd-devel libsoup3-devel zlib-devel
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Build .rpm
+        run: |
+          set -euxo pipefail
+          exec > >(tee /tmp/step.log) 2>&1
+          export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
+          curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs |
+            sh -s -- -y --profile minimal
+          . "$CARGO_HOME/env"
+          ln -sf "$CARGO_HOME/bin/cargo" /usr/local/bin/cargo
+          ln -sf "$CARGO_HOME/bin/rustc" /usr/local/bin/rustc
+          cargo --version
+          npm install -g pnpm@10.32.1
+
+          VER=$(sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml | head -1)
+          TOP="$RUNNER_TEMP/rpmbuild"
+          rm -rf "$TOP"
+          mkdir -p "$TOP"/{SOURCES,SPECS,BUILD,BUILDROOT,RPMS,SRPMS}
+          git archive --prefix="openrevo-$VER/" -o "$TOP/SOURCES/openrevo-$VER.tar.gz" HEAD
+          rpmbuild -ba \
+            --define "_topdir $TOP" \
+            --define "version $VER" \
+            packaging/rpm/openrevo.spec
+          ls -l "$TOP"/RPMS/*/*.rpm
+
+      - uses: ./.github/actions/diag-log
+        if: failure()
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: openrevo-rpm
+          path: ${{ runner.temp }}/rpmbuild/RPMS/*/*.rpm
           if-no-files-found: error

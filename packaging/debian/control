@@ -1,0 +1,46 @@
+Source: openrevo
+Section: utils
+Priority: optional
+Maintainer: openrevo packagers <packagers@openrevo.invalid>
+Build-Depends: debhelper-compat (= 13),
+               cargo,
+               rustc,
+               nodejs,
+               npm,
+               pkg-config,
+               libwebkit2gtk-4.1-dev,
+               libgtk-3-dev,
+               librsvg2-dev,
+               libayatana-appindicator3-dev,
+               libssl-dev,
+               libdbus-1-dev,
+               libudev-dev,
+               libsoup-3.0-dev,
+               libjavascriptcoregtk-4.1-dev,
+               zlib1g-dev
+Standards-Version: 4.7.0
+Rules-Requires-Root: no
+Homepage: https://github.com/faintonce/open-revo
+
+Package: openrevo
+Architecture: any
+Depends: ${shlibs:Depends},
+         ${misc:Depends},
+         libwebkit2gtk-4.1-0,
+         libgtk-3-0,
+         librsvg2-2,
+         libayatana-appindicator3-1,
+         hicolor-icon-theme,
+         libssl3
+Recommends: zenity,
+            polkitd,
+            systemd
+Description: control center for Mechrevo and Tongfang laptops
+ OpenRevo drives the EC, keyboard lighting, fan curves, pause and battery
+ limits of Mechrevo/Tongfang laptops through the sysfs kernel interfaces
+ (tongfang-mifs-wmi hwmon, platform_profile, the kbd_backlight LED) and falls
+ back to direct EC access through ec_sys and the ACPI ports.
+ .
+ This build targets Wayland and X11 desktops and only uses freedesktop
+ services: StatusNotifier for the tray, logind for sleep events, polkit for
+ the privileged EC fallback, and the XDG base directories.
