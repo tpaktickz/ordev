@@ -19,7 +19,9 @@ options=('!lto')
 # pinned one: `_commit=$(git rev-parse HEAD) makepkg ...`
 _repo="${_repo:-tpaktickz/ordev}"
 _commit="${_commit:-291652f}"
-source=("$pkgname::git+https://github.com/$_repo.git#commit=$_commit")
+# Overridable too, so a mirror can be used where github.com is unreachable.
+_gitbase="${_gitbase:-https://github.com}"
+source=("$pkgname::git+$_gitbase/$_repo.git#commit=$_commit")
 sha256sums=('SKIP')
 
 pkgver() {
@@ -48,7 +50,9 @@ build() {
   cd src-tauri
   # The EC helper is a separate, deliberately tiny binary (see
   # crates/openrevo-core/src/bin/openrevo-ec-helper.rs).
-  cargo build --frozen --release --bin open-revo --bin openrevo-ec-helper
+  # `--locked`, not `--frozen`: frozen also implies `--offline`, and a clean
+  # build container has an empty registry cache.
+  cargo build --locked --release --bin open-revo --bin openrevo-ec-helper
 }
 
 package() {

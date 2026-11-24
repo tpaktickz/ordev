@@ -38,10 +38,13 @@ jobs:
         with:
           node-version: 20
 
+      # Installed by hand instead of pnpm/action-setup: the `packageManager`
+      # field carries a full integrity hash and the action's fallback parsing of
+      # it is the first thing to break here.
       - name: Setup pnpm
-        uses: pnpm/action-setup@v4
-        with:
-          run_install: false
+        run: |
+          npm install -g pnpm@10.32.1
+          pnpm --version
 
       - name: Setup Rust Toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -163,7 +166,9 @@ jobs:
     steps:
       - name: Install build dependencies
         run: |
-          pacman -Syu --noconfirm --needed git rust nodejs pnpm \
+          # `sudo` is not part of base-devel, and makepkg -s needs it for
+          # makedepends, so it has to be requested explicitly.
+          pacman -Syu --noconfirm --needed git rust nodejs pnpm sudo \
             webkit2gtk-4.1 gtk3 librsvg libappindicator-gtk3 hicolor-icon-theme openssl
 
       - uses: actions/checkout@v4
@@ -172,18 +177,29 @@ jobs:
 
       # makepkg refuses to run as root and the Arch container is root by default.
       - name: Build package
+        env:
+          CI_REPO: ${{ github.repository }}
+          CI_SHA: ${{ github.sha }}
         run: |
+          set -euxo pipefail
           useradd -m -s /bin/bash builder
           # makepkg -s installs makedepends through sudo; give the builder account
           # passwordless rights or it stalls on a prompt nobody answers.
           echo 'builder ALL=(ALL) NOPASSWD: ALL' > /etc/sudoers.d/builder
           chmod 0440 /etc/sudoers.d/builder
           chown -R builder:builder .
+          id builder
+          ls -ld . packaging/linux
+          # `sudo -u` rather than `su`/`runuser`: su trips over PAM's token update
+          # for a passwordless account ("Authentication token manipulation error"),
+          # and the bare Arch container ships no PAM config for runuser at all.
           cd packaging/linux
-          runuser -u builder -- env \
-            _repo="$GITHUB_REPOSITORY" \
-            _commit="${{ github.sha }}" \
-            makepkg -s --noconfirm --nocheck
+          sudo -H -u builder -- env _repo="$CI_REPO" _commit="$CI_SHA" \
+            makepkg -s --noconfirm --nocheck 2>&1 | tee /tmp/makepkg.log || {
+              rc=$?
+              tail -n 120 /tmp/makepkg.log
+              exit "$rc"
+            }
           ls -1 ./*.pkg.tar.zst
 
       - name: Prepare artifacts & checksums
