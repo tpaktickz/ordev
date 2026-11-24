@@ -433,7 +433,21 @@ fn run_slint_pure_daemon() {
 
     // 3. ACPI Kernel Driver check
     if !crate::hal::platform_probe::needs_acpi_kernel_driver() {
+        // The phrasing is Windows-shaped; on Linux the channel is either the
+        // kernel module's sysfs or raw EC, never "WMI".
+        #[cfg(windows)]
         crate::system::boot_trace::boot_log("DRIVER_OK", "Platform uses native WMI/driverless mailbox channel.");
+        #[cfg(not(windows))]
+        crate::system::boot_trace::boot_log(
+            "DRIVER_OK",
+            if crate::pal::tongfang::driver_present() {
+                "EC channel: tongfang-mifs-wmi sysfs"
+            } else if crate::driver::wmi_ec::is_acpi_driver_available() {
+                "EC channel: raw ec_sys / ECMD-ECDT ports"
+            } else {
+                "No EC channel: MockHAL only"
+            },
+        );
     } else {
         let _ = crate::system::service_mgr::ensure_acpi_driver_ready();
     }

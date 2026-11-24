@@ -1375,7 +1375,12 @@ mod tests {
     #[test]
     fn test_sync_preserves_user_alias_and_presets() {
         let mut profiles = get_builtin_profiles();
-        profiles[0].alias = "🎮耀妹16熟了，就喊你来🚀".to_string();
+        // The sync path keys off a profile already marked `mine`; on a machine with
+        // no DMI match (CI, VM) nothing is marked, so sync would synthesise a new
+        // profile at index 0 and the assertion below would read the wrong entry.
+        // Pin the marker here so the test exercises the preserve branch on any box.
+        profiles[0].mine = true;
+        profiles[0].alias = "🎮耀妹16熟了,就喊你来🚀".to_string();
         profiles[0].presets = Some(ModelPresets {
             office: PowerPreset { pl1: 30, pl2: 35, pl4: 60, temp_offset: 20 },
             balanced: PowerPreset { pl1: 65, pl2: 70, pl4: 90, temp_offset: 10 },
@@ -1384,7 +1389,7 @@ mod tests {
 
         sync_active_machine_profile(&mut profiles);
 
-        assert_eq!(profiles[0].alias, "🎮耀妹16熟了，就喊你来🚀");
+        assert_eq!(profiles[0].alias, "🎮耀妹16熟了,就喊你来🚀");
         assert!(profiles[0].mine);
         let presets = profiles[0].presets.as_ref().unwrap();
         assert_eq!(presets.office.pl1, 30);
@@ -1471,7 +1476,15 @@ mod tests {
         assert!(profile.takeover.is_some(), "TakeoverContract must be assembled");
 
         let mux = profile.gpu_mux.as_ref().unwrap();
-        assert!(!mux.modes_supported.is_empty());
+        // An empty MUX list is the truthful answer on a machine with no discrete GPU
+        // (VM, CI, pure iGPU thin & light); asserting non-empty there would fail for
+        // a reason unrelated to contract assembly.
+        let caps = crate::driver::uefi_nvram::probe_gpu_capabilities();
+        if caps.supports_hybrid || caps.supports_dgpu || caps.supports_igpu_only {
+            assert!(!mux.modes_supported.is_empty(), "a GPU-bearing machine must expose at least one MUX mode");
+        } else {
+            assert!(mux.modes_supported.is_empty(), "no GPU means no MUX modes");
+        }
 
         let bus = profile.bus.as_ref().unwrap();
         assert!(!bus.bus_type.is_empty());

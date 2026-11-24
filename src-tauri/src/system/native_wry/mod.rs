@@ -588,9 +588,18 @@ fn run_native_wry_event_loop(tx: std::sync::mpsc::Sender<EventLoopProxy<NativeWr
     }
 
     let mut builder = EventLoopBuilder::<NativeWryMessage>::with_user_event();
+    // The event loop runs on a spawned thread on both platforms, so the platform
+    // extension has to allow it. On Linux the backend is GTK: `any_thread` is what
+    // keeps tao from insisting on the process main thread, and GTK is initialised
+    // inside this thread as a result.
     #[cfg(target_os = "windows")]
     {
         use tao::platform::windows::EventLoopBuilderExtWindows;
+        builder.with_any_thread(true);
+    }
+    #[cfg(not(target_os = "windows"))]
+    {
+        use tao::platform::unix::EventLoopBuilderExtUnix;
         builder.with_any_thread(true);
     }
 

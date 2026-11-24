@@ -136,6 +136,18 @@ pub fn run_tray_loop(ec_instance: SharedEcBridge) {
             *tray.handle.lock().unwrap_or_else(|e| e.into_inner()) = Some(for_tray.clone());
         });
     }
+    // StatusNotifierItem is the freedesktop standard, but the host side is not:
+    // KDE and XFCE ship a watcher, GNOME only shows items through an extension.
+    // Say so once instead of letting the user wonder where the icon went.
+    let desktop = std::env::var("XDG_CURRENT_DESKTOP").unwrap_or_default();
+    if desktop.to_ascii_uppercase().contains("GNOME") {
+        crate::log_warn!(
+            "TRAY",
+            "GNOME has no StatusNotifierItem host by default; install the AppIndicator extension or start OpenRevo with --visible"
+        );
+    }
+    crate::log_info!("TRAY", "Publishing StatusNotifierItem (desktop={})", desktop);
+
     match service.run() {
         Ok(()) => crate::log_info!("TRAY", "StatusNotifierItem host stopped"),
         Err(err) => crate::log_error!("TRAY", "StatusNotifierItem host failed: {}", err),

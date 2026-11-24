@@ -201,20 +201,23 @@ pub fn processes() -> &'static dyn ProcessPort;
 - 设备开关：触摸板走 EC 位，无线电走 `/sys/class/rfkill`，摄像头走 `/sys/class/video4linux`，麦克风走 `wpctl`/`pactl`。
 - 文件对话框：`zenity` → `kdialog`。
 
+热键与输入（`ae9d9fc` 之后）：`pal/evdev.rs` 被动读 `/dev/input/event*`（不 `EVIOCGRAB`），`pal/keymap.rs` 把 evdev code 折回项目已有的 Win32 VK 词表，`hooks_linux.rs` 复刻锁键去抖与 toast。空闲时刻来自同一事件流，`pal::power::last_input_tick` 不再恒 `None`。**portal `GlobalShortcuts` 仍未接**：它只在有会话 portal 的桌面可用，且需要持久 token，属于后续增强，不影响 evdev 路径。
+
 未落地（仍是空缺，不是完成）：
 
-- **热键**：`hooks_linux` 只转调 `init_shortcuts`，evdev 抓取与 portal `GlobalShortcuts` 都还没接。
-- **空闲检测**：`pal::power::last_input_tick` 返回 `None`，所以屏灭后"用户动了"的判定退化为未知。
-- **BlueZ**：`ble_cooler` 的扫描/连接一律返回 Err，蓝牙水冷在 Linux 当前不可用。
-- **colord**：ICC 安装只写关联文件，没让 colord 真挂载。
-- **native_wry**：WebView2 合成窗口在 Linux 仍是待办，插件宿主改由 Tauri 独立 toplevel 承担（`webview_dock` 的 Linux 分支）。
+- **BlueZ**：`ble_cooler` 的扫描/连接一律返回 Err，蓝牙水冷在 Linux 当前不可用（用户明确说过不急）。
+- **colord**：ICC 安装只写关联文件，没让 colord 真挂载；gamma 已能直写 DRM，跨桌面着色仍靠直写。
+- **native_wry**：插件宿主在 Linux 由 Tauri 独立 toplevel 承担；`native_wry` 的 wry 合成路径在 Linux 已允许跨线程建 GTK event loop（`EventLoopBuilderExtUnix::with_any_thread`），但未在真机验证。
+- **layer-shell OSD**：winit 0.30 不暴露 `wl_surface`，所以 OSD 仍是普通 toplevel + `always-on-top`，定位交给合成器策略。
 
 ---
 
 ## P4 Wayland / KDE 专项
 
-1. **OSD / 小组件**：Slint 后端是 winit，`slint` 开 `unstable-winit-030`，`WinitWindowAccessor::winit_window()` 取 `&winit::window::Window` → `raw_window_handle` → `wayland-protocols` 的 `zwlr_layer_shell_v1`，`Layer::Overlay`、`KeyboardInteractivity::None`、`exclusive_zone=-1`。
-   - 若嫌自己接协议麻烦：Tauri 侧窗口可用 `libloading` 动态加载 `libgtk-layer-shell.so.0`，调用序列与常量照抄 `docs/linux/ref/gglib-layer-shell.rs`（`LAYER_OVERLAY=3`、`KEYBOARD_ON_DEMAND=2`、必须 `gtk_layer_is_supported()` 先探，Mutter/X11 直接退回）。
+1. **OSD / 小组件**：**未落地**。原计划的 `unstable-winit-030` + `zwlr_layer_shell_v1` 路线被证伪了一半：`WinitWindowAccessor::winit_window()` 确实能拿到 winit 窗口，但 **winit 0.30 不公开 `wl_surface`**（`platform/wayland.rs` 只有 `is_wayland()`、`with_wayland()` 之类），所以拿不到可包成 `zwlr_layer_surface_v1` 的代理。可行路线只剩两条，都需要额外进程或额外重写：
+   - 用 `gtk-layer-shell` 写一个独立 GTK OSD 进程，替换现有的 Slint OSD（照抄 `docs/linux/ref/gglib-layer-shell.rs`：`LAYER_OVERLAY=3`、`KEYBOARD_ON_DEMAND=2`、先 `gtk_layer_is_supported()`）。
+   - 等 winit 暴露 `wayland_surface()` 后自接协议。
+   当前交付：OSD 是普通 toplevel + `always-on-top: true`（`crates/openrevo-osd/ui/osd.slint:5-7`），固定 640×130，定位由合成器决定（KWin 下新 toplevel 居中）。
 2. **主界面保持 Slint，且必须可自由缩放**（详见 P4.5）。
 3. **托盘单击行为**：SNI `Activate` 提供点击坐标，左键唤起主窗；`dismiss_windows_tray_overflow` 在 Linux 恒 no-op。
 4. **快捷键**：portal 会话恢复（`~/.config/openrevo/shortcuts.toml` 存 token），无 portal 时降级 X11 grab 并提示。
