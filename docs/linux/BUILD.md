@@ -58,11 +58,21 @@ and the `ec_sys` module parameter. Summary:
 - root or `CAP_SYS_RAWIO` → EC access (`ec_sys` debugfs and the ECMD/ECDT ports).
 - `uaccess` (automatic for the seat) → hidraw keyboard lighting, backlight.
 
-Nothing needs a polkit prompt at runtime, because every write is either a sysfs
-node owned by the user's seat or an operation done by an already-privileged
-helper process. If you want EC access without running as root in the terminal,
-`sudo setcap cap_sys_rawio+ep /usr/bin/open-revo` covers the port path but not
-debugfs (`ec_sys` nodes stay 0700 root).
+Without any of the three grants, EC writes degrade: bank 0 reads still work when
+`ec_sys` is loaded read-only, but nothing on the EC gets written and the app falls
+back to `platform_profile` for power modes.
+
+Two ways to get the port path without running the whole daemon as root:
+
+- `sudo setcap cap_sys_rawio+ep /usr/bin/open-revo` — covers the EC ports, not
+  debugfs (`ec_sys` nodes stay 0700 root).
+- **Polkit helper** (opt-in): `OPENREVO_EC_HELPER=1 open-revo`. Every write that
+  the in-process path cannot do is handed to `openrevo-ec-helper` through
+  `pkexec`; `com.openrevo.ecwrite` grants `auth_admin_keep`, so a mode switch is
+  one prompt and stays quiet for a while afterwards. Off by default because a
+  prompt during boot is intrusive and the kernel module covers most machines.
+  The helper accepts only bounded `w <addr16> <value8>` lines (max 64) and
+  exposes no other privileged operation.
 
 ## Kernel driver (preferred)
 

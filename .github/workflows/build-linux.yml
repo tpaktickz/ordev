@@ -62,7 +62,8 @@ jobs:
         working-directory: src-tauri
         # The suite is hardware-independent on purpose: anything that needs a real
         # EC or a discrete GPU asserts the "no hardware" branch instead of skipping.
-        run: cargo test -p openrevo-core --lib
+        # `--tests` also covers the privileged helper's input-validation contract.
+        run: cargo test -p openrevo-core
 
   package:
     name: Build Arch package
@@ -86,7 +87,10 @@ jobs:
           cd packaging/linux
           # The PKGBUILD pulls its own source from git; point it at the checkout so
           # CI builds the commit under test rather than a stale remote ref.
-          runuser -u builder -- makepkg -s --noconfirm --nocheck
+          runuser -u builder -- env \
+            _repo="$GITHUB_REPOSITORY" \
+            _commit="$(git rev-parse HEAD)" \
+            makepkg -s --noconfirm --nocheck
 
       - uses: actions/upload-artifact@v4
         with:

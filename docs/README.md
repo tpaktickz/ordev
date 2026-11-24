@@ -22,6 +22,12 @@
 - [AI Agent 文档入口](skill.md)：AI Agent 从这里开始，再按任务分流到各章节
 - [插件示例源码索引](../plugins_sample/README.md)
 
+## Linux 移植
+
+- [Linux 构建说明](linux/BUILD.md)：依赖、权限矩阵、内核驱动装载顺序、headless 验证
+- [移植计划与交付状态](linux/PORT-PLAN.md)：分阶段计划、逐文件处置表、已完成与未完成项
+- [参考实现与内核 ABI](linux/REFERENCES.md)：tongfang-mifs-wmi 的 WMI 函数表、SNI / layer-shell / portal 实现线索
+
 ## 参考资料
 
 - [变更日志](../CHANGELOG.md)

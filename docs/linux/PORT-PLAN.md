@@ -256,9 +256,9 @@ export component MainWindow inherits Window {
 1. `PKGBUILD` —— **已落地**（`packaging/linux/PKGBUILD`，`openrevo-git`）：`depends` 只放真实硬依赖（webkit2gtk-4.1、gtk3、librsvg、libappindicator-gtk3、hicolor-icon-theme、openssl），`zenity`/`wlr-randr`/`powerprofilesctl` 之类是可选运行时不上 `depends`。装 bin、desktop、三级 hicolor 图标、udev、modprobe、modules-load、user unit、LICENSE。`makepkg --printsrcinfo` 通过。
 2. `udev` 规则 —— **已落地**（`packaging/linux/60-openrevo.rules`）：hidraw（048d:600b、048d:ce00）与 `backlight` 打 `uaccess`；`/etc/modules-load.d/openrevo.conf` 写 `ec_sys`。
 3. `modprobe` 参数 `write_support=1` —— **已落地**（`packaging/linux/modprobe-openrevo.conf`）。
-4. 特权写 —— **未落地**：目前靠 root/CAP_SYS_RAWIO 直接用（`packaging/linux/BUILD.md` 里给了 `setcap` 一行），polkit `com.openrevo.ecwrite` + 单 helper bin 还没写。EC 全量功能在普通用户下因此只有 sysfs 那一档可用。
+4. 特权写 —— **已落地（opt-in）**：`crates/openrevo-core/src/bin/openrevo-ec-helper.rs` 是唯一以 root 运行的代码（`probe` / `read <addr16>` / `write` 读 stdin 的 `w <addr16> <value8>`，上限 64 条，其余 token 一律拒绝）；`packaging/linux/com.openrevo.ecwrite.policy` 用 `annotate org.freedesktop.policykit.exec.path` 把 action 钉在这个路径上，三档都是 `auth_admin_keep`。`pal::ec::helper_write` 只在 `OPENREVO_EC_HELPER=1` 时启用（开机弹授权框很扰民，且内核模块覆盖了大多数机器），节点与端口都失败时才走到它，整批写共用一次授权。代价：每次走这条路都是一个 `pkexec` 进程，读路径不走它（读失败就报未知）。
 5. `systemd --user` unit —— **已落地**（`packaging/linux/openrevo.service`，`Restart=on-failure`、`PartOf=graphical-session.target`、不带 `--visible` 即零占用待机）。与 XDG autostart 二选一，同时开会起两个进程（single-instance 会折叠）。
-6. CI —— **未落地**：`.github/workflows/release.yml` 的 `build-linux` job 还没加。
+6. CI —— **已落地**：`.github/workflows/build-linux.yml`（check/test/clippy + Arch 容器打包）与 `.github/workflows/release.yml`（新增 `build-linux` job 出 `OpenRevo-<tag>-x86_64.pkg.tar.zst` + `checksums-linux.txt`；发布步骤抽成 `publish` job，`needs: [build-windows, build-linux]` 后统一挂到 Release，避免两个 job 并发写同一个 release）。`PKGBUILD` 的 `_repo`/`_commit` 可由环境覆盖，CI 因此构建被测 commit 而不是钉死的 ref。
 
 ---
 

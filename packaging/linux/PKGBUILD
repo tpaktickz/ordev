@@ -15,8 +15,11 @@ depends=(
 )
 makedepends=('rust' 'cargo' 'nodejs' 'pnpm')
 options=('!lto')
-_commit=291652f
-source=("$pkgname::git+https://github.com/tpaktickz/ordev.git#commit=$_commit")
+# Both are overridable so CI can build the commit under test instead of a
+# pinned one: `_commit=$(git rev-parse HEAD) makepkg ...`
+_repo="${_repo:-tpaktickz/ordev}"
+_commit="${_commit:-291652f}"
+source=("$pkgname::git+https://github.com/$_repo.git#commit=$_commit")
 sha256sums=('SKIP')
 
 pkgver() {
@@ -43,7 +46,9 @@ build() {
 
   export CARGO_TARGET_DIR="$srcdir/target"
   cd src-tauri
-  cargo build --frozen --release --bin open-revo
+  # The EC helper is a separate, deliberately tiny binary (see
+  # crates/openrevo-core/src/bin/openrevo-ec-helper.rs).
+  cargo build --frozen --release --bin open-revo --bin openrevo-ec-helper
 }
 
 package() {
@@ -72,6 +77,14 @@ package() {
 
   install -Dm644 packaging/linux/openrevo.service \
     "$pkgdir/usr/lib/systemd/user/openrevo.service"
+
+  # Privileged EC fallback. The helper is not setuid: pkexec plus this policy
+  # decides, and the policy pins the helper's own path, so the action cannot be
+  # borrowed by another binary.
+  install -Dm755 "$srcdir/target/release/openrevo-ec-helper" \
+    "$pkgdir/usr/lib/openrevo/openrevo-ec-helper"
+  install -Dm644 packaging/linux/com.openrevo.ecwrite.policy \
+    "$pkgdir/usr/share/polkit-1/actions/com.openrevo.ecwrite.policy"
 
   install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
 }

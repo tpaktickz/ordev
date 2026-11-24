@@ -2,7 +2,7 @@ use parking_lot::{Mutex, RwLock};
 use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU8, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::LazyLock;
 use std::time::SystemTime;
 
@@ -382,6 +382,16 @@ pub fn get_log_path() -> PathBuf {
     crate::system::config::get_config_dir().join("open-revo.log")
 }
 
+/// Route console log lines to stderr instead of stdout.
+///
+/// Set once by components whose stdout is a protocol (the EC helper prints
+/// `OK <n>` / `ERR ...` and nothing else).
+pub fn set_stderr(enabled: bool) {
+    LOG_TO_STDERR.store(enabled, Ordering::Relaxed);
+}
+
+static LOG_TO_STDERR: AtomicBool = AtomicBool::new(false);
+
 pub fn log_raw(level: &str, module: &str, message: &str) {
     let is_fatal = level == "ERROR" || level == "PANIC" || module == "CRASH";
     let is_warn_or_fatal = is_fatal || level == "WARN";
@@ -400,8 +410,14 @@ pub fn log_raw(level: &str, module: &str, message: &str) {
     let formatted_time = format!("{}.{:03}", secs, millis);
     let log_line = format!("[{}] [{}] [{}] {}\n", formatted_time, level, module, message);
 
-    // 2. Always print to standard console (when attached)
-    print!("{}", log_line);
+    // 2. Always print to standard console (when attached). Console-side tools
+    // (`openrevo-ec-helper`) switch this to stderr so their own machine-readable
+    // output on stdout stays parseable.
+    if LOG_TO_STDERR.load(Ordering::Relaxed) {
+        eprint!("{}", log_line);
+    } else {
+        print!("{}", log_line);
+    }
 
     // 3. Disk writing rules:
     // - LOG_LEVEL_ALL (2, via --debug): records DEBUG, INFO, WARN, ERROR, PANIC

@@ -228,6 +228,33 @@ pnpm tauri build
 
 ---
 
+## 🐧 Linux 移植（Wayland / X11）
+
+同一套代码库现在也能在 Linux 上构建运行。分支 `wayland-kde` 承载全部移植工作，**只依赖 XDG / freedesktop 标准**（StatusNotifierItem 托盘、logind 睡眠事件、XDG autostart、DRM/EDID、`platform_profile`、colord 色彩目录），不绑任何单一桌面。
+
+**三级 EC 通道**，按机器自动降档：
+
+| 档位 | 条件 | 能力 |
+| --- | --- | --- |
+| 1. 内核 sysfs | `tongfang-mifs-wmi` 模块（先 `modprobe`，见 `packaging/linux/modules-load-openrevo.conf`） | 风扇转速/曲线、CPU 温度、性能模式、GPU 模式、键盘灯、亮度，全部走标准节点 |
+| 2. `ec_sys` + ACPI 端口 | 无模块时，`ec_sys write_support=1` | 全 bank 读写；bank ≥ 1 需 root 或 `cap_sys_rawio`，可选 `OPENREVO_EC_HELPER=1` 走 polkit 授权 |
+| 3. MockHAL | 两者都没有（虚拟机等） | 界面可用，硬件读数与写入为空操作 |
+
+**构建**：
+
+```bash
+git clone https://github.com/tpaktickz/ordev.git -b wayland-kde
+cd ordev/packaging/linux && makepkg -s
+```
+
+或按 [docs/linux/BUILD.md](docs/linux/BUILD.md) 从源码构建（依赖、权限矩阵、headless 验证方法都在里面）。移植计划与逐项交付状态见 [docs/linux/PORT-PLAN.md](docs/linux/PORT-PLAN.md)。
+
+**已实现**：Slint 主界面自由缩放（拖边框，min 320×480）、evdev 全局热键与空闲检测、SNI 托盘、logind 睡眠/合盖事件、蓝光/亮度/音量/触摸板/无线开关、XTX ICC 目录与 DRM gamma、nvidia-smi 拓扑、XDG 自启动、zenity/kdialog 文件对话框、PKGBUILD 与 udev 规则。
+
+**未实现**：蓝牙水冷（待 BlueZ 后端）、colord 深度集成、layer-shell 定位的 OSD（winit 0.30 不暴露 `wl_surface`，当前用普通 toplevel + `always-on-top`）。真机只在 VirtualBox 上验过编译与降级路径，实机读数需要真机确认。
+
+---
+
 ## 📜 开源协议
 
 本项目采用 **[GNU General Public License v3.0 (GPLv3)](LICENSE)** 强互惠协议开源。

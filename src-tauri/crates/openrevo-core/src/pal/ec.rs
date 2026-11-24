@@ -189,7 +189,7 @@ mod windows_arm {
 }
 
 #[cfg(target_os = "linux")]
-pub use linux::{available, batch_read, batch_write, read, write};
+pub use linux::{available, batch_read, batch_write, read, write, write_supported};
 // The registry addresses are 16-bit: `(bank << 8) | offset`. Bank 0 is EC
 // address space proper and available through `ec_sys`; every higher bank needs
 // an ACPI "Read EC" (0x81) / "Write EC" (0x80) transaction, because the kernel
@@ -209,6 +209,8 @@ pub mod linux {
 
     /// Newer `ec_sys` layout (kernel >= 5.x, `write_support=1`).
     const FLAT_NODE: &str = "/sys/kernel/debug/ec/ec_sys";
+    /// Installed by the package for the polkit-mediated fallback.
+    const HELPER_PATH: &str = "/usr/lib/openrevo/openrevo-ec-helper";
     /// Older per-device layout.
     const LEGACY_NODE: &str = "/sys/kernel/debug/ec/ec0/io";
     /// EC controllers need a short settle window between consecutive writes;
@@ -450,7 +452,54 @@ pub mod linux {
                 return true;
             }
         }
-        port_write(addr, val)
+        if port_write(addr, val) {
+            return true;
+        }
+        helper_write(&[(addr, val)])
+    }
+
+    /// Opt-in escape hatch for stock kernels with no module and no writable node:
+    /// hand the write to `openrevo-ec-helper` through `pkexec`, where polkit
+    /// decides about the prompt. Off unless `OPENREVO_EC_HELPER=1`, because a
+    /// prompted write during boot is intrusive and most machines never need it.
+    fn helper_write(entries: &[(u16, u8)]) -> bool {
+        if std::env::var_os("OPENREVO_EC_HELPER").is_none() || entries.is_empty() {
+            return false;
+        }
+        let helper = if std::path::Path::new(HELPER_PATH).exists() {
+            HELPER_PATH.to_string()
+        } else {
+            "openrevo-ec-helper".to_string()
+        };
+        let mut cmd = crate::pal::process::command("pkexec");
+        cmd.arg(helper).arg("write");
+        cmd.stdin(std::process::Stdio::piped());
+        cmd.stdout(std::process::Stdio::piped());
+        cmd.stderr(std::process::Stdio::null());
+        let mut child = match cmd.spawn() {
+            Ok(child) => child,
+            Err(err) => {
+                crate::log_warn!("PAL-EC", "cannot spawn {} via pkexec: {}", HELPER_PATH, err);
+                return false;
+            }
+        };
+        if let Some(mut stdin) = child.stdin.take() {
+            use std::io::Write as _;
+            let mut payload = String::new();
+            for (addr, val) in entries {
+                payload.push_str(&format!("w {:04x} {:02x}\n", addr, val));
+            }
+            let _ = stdin.write_all(payload.as_bytes());
+        }
+        let ok = matches!(child.wait(), Ok(status) if status.success());
+        if !ok {
+            crate::log_warn!(
+                "PAL-EC",
+                "privileged helper rejected {} write(s); run as root or pre-authorise com.openrevo.ecwrite",
+                entries.len()
+            );
+        }
+        ok
     }
 
     /// Batch read, sequential. Missing entries come back as `None`.
@@ -473,9 +522,20 @@ pub mod linux {
         }
     }
 
-    /// Batch write with per-byte settling.
+    /// Batch write with per-byte settling. Falls back to a single privileged
+    /// call for the whole batch rather than one prompt per byte.
     pub fn batch_write(entries: &[(u16, u8)]) -> bool {
-        entries.iter().all(|(addr, val)| write(*addr, *val))
+        let mut all_ok = true;
+        for (addr, val) in entries {
+            if !write(*addr, *val) {
+                all_ok = false;
+                break;
+            }
+        }
+        if all_ok {
+            return true;
+        }
+        helper_write(entries)
     }
 
     /// Diagnostic snapshot for the port transaction path.

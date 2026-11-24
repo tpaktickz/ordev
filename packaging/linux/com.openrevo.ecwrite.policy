@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC
+ "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<policyconfig>
+
+  <!--
+    Narrow privileged path for EC byte writes. Used only when the kernel module
+    and a writable ec_sys node are both absent, i.e. when the ACPI EC
+    command/data ports are the only channel left.
+
+    opt-in on the app side: OPENREVO_EC_HELPER=1. Off by default because every
+    prompted write would otherwise interrupt the user at boot, and most machines
+    do not need this path at all.
+  -->
+  <action id="com.openrevo.ecwrite">
+    <description>Write a byte to the laptop embedded controller</description>
+    <description xml:lang="zh_CN">向笔记本嵌入式控制器写入一个字节</description>
+    <message>OpenRevo needs raw access to the embedded controller to apply hardware settings</message>
+    <message xml:lang="zh_CN">OpenRevo 需要直接访问嵌入式控制器才能应用硬件设置</message>
+    <defaults>
+      <!-- Keep the grant for a short while so a mode switch is one prompt, not one per byte. -->
+      <allow_any>auth_admin_keep</allow_any>
+      <allow_inactive>auth_admin_keep</allow_inactive>
+      <allow_active>auth_admin_keep</allow_active>
+    </defaults>
+    <annotate key="org.freedesktop.policykit.exec.path">/usr/lib/openrevo/openrevo-ec-helper</annotate>
+  </action>
+
+</policyconfig>
