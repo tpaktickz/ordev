@@ -7,7 +7,7 @@
 //! 原实现在后台线程里每 1500ms 执行一次 `nvidia-smi --query-gpu=...`。
 //! 每次调用都是一次完整的 `CreateProcess` + NVML 初始化 + 进程退出，实测单次
 //! 耗时 450~550ms，折合约 33% 单核占用（见 issue #121）。而 `nvidia-smi`
-//! 本身只是 NVML 的命令行前端——直接调用 `nvml.dll` 可把单次采样压到微秒级，
+//! 本身只是 NVML 的命令行前端——直接调用 NVML 动态库可把单次采样压到微秒级，
 //! 且不产生任何子进程。
 //!
 //! ## 生命周期
@@ -22,7 +22,7 @@
 //!
 //! ## 失败语义
 //!
-//! 整个模块是可选的：`nvml.dll` 缺失（未装驱动）、符号缺失（驱动过旧）或
+//! 整个模块是可选的：NVML 动态库缺失（未装驱动）、符号缺失（驱动过旧）或
 //! `nvmlInit_v2` 失败时，[`NvmlContext::open`] 返回 `Err`，调用方回退到
 //! 原有的 `nvidia-smi` 路径，不构成硬依赖。
 
@@ -147,13 +147,38 @@ pub struct NvmlContext {
 // SAFETY: device 是 NVML 内部的不透明句柄，随上下文一起移动；NvmlApi 已声明为 Send。
 unsafe impl Send for NvmlContext {}
 
+/// 依次尝试的动态库名。Linux 用 ABI 稳定的 soname，`libnvidia-ml.so` 只是
+/// `nvidia-utils` 才会装的开发期链接，缺了它也应该能跑。
+#[cfg(target_os = "linux")]
+const LIB_CANDIDATES: [&str; 3] = [
+    "libnvidia-ml.so.1",
+    "libnvidia-ml.so",
+    "/usr/lib/libnvidia-ml.so.1",
+];
+
+#[cfg(target_os = "windows")]
+const LIB_CANDIDATES: [&str; 1] = ["nvml.dll"];
+
+#[cfg(not(any(target_os = "linux", target_os = "windows")))]
+const LIB_CANDIDATES: [&str; 1] = ["libnvidia-ml.so.1"];
+
 impl NvmlContext {
-    /// 加载 `nvml.dll`、解析符号并初始化会话。
+    /// 加载 NVML 动态库、解析符号并初始化会话。
     ///
     /// 任一环节失败都返回 `Err(String)`（含可读原因），调用方应回退到 `nvidia-smi`。
     pub fn open() -> Result<Self, String> {
-        let lib = unsafe { libloading::Library::new("nvml.dll") }
-            .map_err(|e| format!("加载 nvml.dll 失败: {e}"))?;
+        let mut loaded = None;
+        let mut last_error = String::new();
+        for name in LIB_CANDIDATES {
+            match unsafe { libloading::Library::new(name) } {
+                Ok(lib) => {
+                    loaded = Some(lib);
+                    break;
+                }
+                Err(e) => last_error = format!("加载 {name} 失败: {e}"),
+            }
+        }
+        let lib = loaded.ok_or(last_error)?;
 
         // 集中解析符号：缺任何一个都视为驱动过旧，整体回退
         unsafe {
