@@ -1,0 +1,2668 @@
++ git config --global --add safe.directory /__w/ordev/ordev
++ export RUSTUP_HOME=/opt/rustup CARGO_HOME=/opt/cargo
++ RUSTUP_HOME=/opt/rustup
++ CARGO_HOME=/opt/cargo
++ curl --proto =https --tlsv1.2 -sSf https://sh.rustup.rs
++ sh -s -- -y --profile minimal
+info: downloading installer
+error: $HOME differs from euid-obtained home directory: you may be using sudo
+error: $HOME directory: /github/home
+error: euid-obtained home directory: /root
+info: profile set to minimal
+info: default host tuple is x86_64-unknown-linux-gnu
+info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+info: downloading 3 components
+info: default toolchain set to stable-x86_64-unknown-linux-gnu
+
+  stable-x86_64-unknown-linux-gnu installed - rustc 1.100.0 (0ef1bc386 2026-11-09)
+
+
+Rust is installed now. Great!
+
+To get started you may need to restart your current shell.
+This would reload your PATH environment variable to include
+Cargo's bin directory (/opt/cargo/bin).
+
+To configure your current shell, you need to source the
+corresponding env file under /opt/cargo.
+
+Consider running the right command for your shell (note the leading DOT):
+. "/opt/cargo/env" # For sh/ash/dash/pdksh
+cargo:rerun-if-env-changed=CC_x86_64-unknown-linux-gnu
+CC_x86_64-unknown-linux-gnu = None
+cargo:rerun-if-env-changed=CC_x86_64_unknown_linux_gnu
+CC_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=HOST_CC
+HOST_CC = None
+cargo:rerun-if-env-changed=CC
+CC = None
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+cargo:rerun-if-env-changed=CPATH
+cargo:rerun-if-env-changed=C_INCLUDE_PATH
+cargo:rerun-if-env-changed=CPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJC_INCLUDE_PATH
+cargo:rerun-if-env-changed=OBJCPLUS_INCLUDE_PATH
+cargo:rerun-if-env-changed=COMPILER_PATH
+cargo:rerun-if-env-changed=SOURCE_DATE_EPOCH
+cargo:rerun-if-env-changed=GCC_EXEC_PREFIX
+cargo:rerun-if-env-changed=CRATE_CC_NO_DEFAULTS
+CRATE_CC_NO_DEFAULTS = None
+cargo:rerun-if-env-changed=CFLAGS
+CFLAGS = None
+cargo:rerun-if-env-changed=HOST_CFLAGS
+HOST_CFLAGS = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64_unknown_linux_gnu
+CFLAGS_x86_64_unknown_linux_gnu = None
+cargo:rerun-if-env-changed=CFLAGS_x86_64-unknown-linux-gnu
+CFLAGS_x86_64-unknown-linux-gnu = None
++ . /opt/cargo/env
+++ case ":${PATH}:" in
+++ export PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+++ PATH=/opt/cargo/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
++ ln -sf /opt/cargo/bin/cargo /usr/local/bin/cargo
++ ln -sf /opt/cargo/bin/rustc /usr/local/bin/rustc
++ cargo --version
+cargo 1.100.0 (3acc79c0c 2026-11-05)
++ npm install -g pnpm@10.32.1
+
+added 1 package in 741ms
+
+1 package is looking for funding
+  run `npm fund` for details
+++ sed -n 's/^version = "\(.*\)"/\1/p' src-tauri/Cargo.toml
+++ head -1
++ VER=0.9.8
++ TOP=/__w/_temp/rpmbuild
++ rm -rf /__w/_temp/rpmbuild
++ mkdir -p /__w/_temp/rpmbuild/SOURCES /__w/_temp/rpmbuild/SPECS /__w/_temp/rpmbuild/BUILD /__w/_temp/rpmbuild/BUILDROOT /__w/_temp/rpmbuild/RPMS /__w/_temp/rpmbuild/SRPMS
++ git archive --prefix=openrevo-0.9.8/ -o /__w/_temp/rpmbuild/SOURCES/openrevo-0.9.8.tar.gz HEAD
++ rpmbuild -ba --nodeps --define '_topdir /__w/_temp/rpmbuild' --define 'version 0.9.8' packaging/rpm/openrevo.spec
+setting SOURCE_DATE_EPOCH=1795478400
+Executing(%mkbuilddir): /bin/sh -e /var/tmp/rpm-tmp.crdaoc
+Executing(%prep): /bin/sh -e /var/tmp/rpm-tmp.DTenp7
++ umask 022
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ rm -rf openrevo-0.9.8
++ /usr/lib/rpm/rpmuncompress -x /__w/_temp/rpmbuild/SOURCES/openrevo-0.9.8.tar.gz
++ STATUS=0
++ '[' 0 -ne 0 ']'
++ cd openrevo-0.9.8
++ /usr/bin/chmod -Rf a+rX,u+w,g-w,o-w .
++ RPM_EC=0
+++ jobs -p
++ exit 0
+Executing(%build): /bin/sh -e /var/tmp/rpm-tmp.3GZEn9
++ umask 022
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ CFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CFLAGS
++ CXXFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CXXFLAGS
++ FFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FFLAGS
++ FCFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FCFLAGS
++ VALAFLAGS=-g
++ export VALAFLAGS
++ RUSTFLAGS='-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Cforce-frame-pointers=yes -Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes --cap-lints=warn'
++ export RUSTFLAGS
++ LDFLAGS='-Wl,-z,relro -Wl,--as-needed  -Wl,-z,pack-relative-relocs -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -Wl,--build-id=sha1 -specs=/usr/lib/rpm/redhat/redhat-package-notes '
++ export LDFLAGS
++ LT_SYS_LIBRARY_PATH=/usr/lib64:
++ export LT_SYS_LIBRARY_PATH
++ CC=gcc
++ export CC
++ CXX=g++
++ export CXX
++ cd openrevo-0.9.8
++ export CARGO_TARGET_DIR=/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target
++ CARGO_TARGET_DIR=/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target
++ npm i -g pnpm@10.32.1
+
+changed 1 package in 487ms
+
+1 package is looking for funding
+  run `npm fund` for details
++ pnpm install --frozen-lockfile
+Lockfile is up to date, resolution step is skipped
+Packages: +80
+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+Progress: resolved 0, reused 0, downloaded 1, added 0
+Progress: resolved 0, reused 0, downloaded 80, added 80, done
+node_modules/esbuild postinstall$ node install.js
+node_modules/esbuild postinstall: Done
+
+Done in 1.3s using pnpm v10.32.1
++ pnpm build
+
+> open-revo-ui@0.9.8 build /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8
+> tsc && vite build
+
+fatal: not a git repository (or any parent up to mount point /)
+Stopping at filesystem boundary (GIT_DISCOVERY_ACROSS_FILESYSTEM not set).
+[36mvite v5.4.11 [32mbuilding for production...[36m[39m
+transforming...
+[32m✓[39m 1663 modules transformed.
+rendering chunks...
+computing gzip size...
+[2mdist/[22m[32mindex.html                  [39m[1m[2m  0.86 kB[22m[1m[22m[2m │ gzip:   0.47 kB[22m
+[2mdist/[22m[2massets/[22m[32mlogo-BmAeRQ1x.png    [39m[1m[2m 34.04 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32mwechat-CQ1ljkRz.jpg  [39m[1m[2m 88.35 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[32malipay-CR2EmPpy.jpg  [39m[1m[2m106.65 kB[22m[1m[22m
+[2mdist/[22m[2massets/[22m[35mindex-DPxCmVs7.css   [39m[1m[2m 68.43 kB[22m[1m[22m[2m │ gzip:  11.62 kB[22m
+[2mdist/[22m[2massets/[22m[36mindex-DEgvgxkH.js    [39m[1m[33m667.54 kB[39m[22m[2m │ gzip: 184.17 kB[22m
+[33m
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rollupOptions.output.manualChunks to improve chunking: https://rollupjs.org/configuration-options/#output-manualchunks
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.[39m
+[32m✓ built in 1.66s[39m
++ cd src-tauri
++ cargo build --locked --release --bin open-revo
+    Updating crates.io index
+ Downloading crates ...
+  Downloaded openssl-sys v0.9.117
+  Downloaded num-conv v0.2.2
+  Downloaded rustc_version v0.4.1
+  Downloaded openssl-macros v0.1.1
+  Downloaded proc-macro-crate v2.0.2
+  Downloaded proc-macro-error v1.0.4
+  Downloaded quick-error v2.0.1
+  Downloaded quote v1.0.47
+  Downloaded num_enum_derive v0.7.6
+  Downloaded phf_codegen v0.13.1
+  Downloaded schemars_derive v0.8.22
+  Downloaded serde_derive v1.0.229
+  Downloaded num-traits v0.2.19
+  Downloaded ordered-stream v0.2.0
+  Downloaded ordered-float v5.5.1
+  Downloaded pin-project v1.1.13
+  Downloaded pin-project-lite v0.2.17
+  Downloaded percent-encoding v2.3.2
+  Downloaded piper v0.2.5
+  Downloaded ab_glyph v0.2.32
+  Downloaded anstyle v1.0.14
+  Downloaded pango-sys v0.18.0
+  Downloaded ansi_term v0.12.1
+  Downloaded parking_lot v0.12.5
+  Downloaded anyhow v1.0.104
+  Downloaded arboard v3.7.0
+  Downloaded num_enum v0.7.6
+  Downloaded openssl v0.10.81
+  Downloaded rspolib v0.1.2
+  Downloaded sctk-adwaita v0.10.1
+  Downloaded once_cell v1.21.4
+  Downloaded pango v0.18.3
+  Downloaded raw-window-handle v0.6.2
+  Downloaded ref-cast-impl v1.0.27
+  Downloaded powerfmt v0.2.0
+  Downloaded read-fonts v0.41.0
+  Downloaded rowan v0.17.0
+  Downloaded rustc-hash v2.1.3
+  Downloaded serde_json v1.0.151
+  Downloaded parley_data v0.11.1
+  Downloaded phf v0.13.1
+  Downloaded pin-weak v1.1.0
+  Downloaded polling v3.11.0
+  Downloaded potential_utf v0.1.6
+  Downloaded proc-macro-crate v3.5.0
+  Downloaded serde v1.0.229
+  Downloaded parlance v0.1.1
+  Downloaded brotli-decompressor v5.0.3
+  Downloaded profiling v1.0.18
+  Downloaded arrayref v0.3.9
+  Downloaded pin-utils v0.1.1
+  Downloaded openssl-probe v0.2.1
+  Downloaded presser v0.3.1
+  Downloaded resvg v0.48.1
+  Downloaded portable-atomic v1.15.0
+  Downloaded rustc-hash v1.1.0
+  Downloaded icu_properties v2.3.0
+  Downloaded atomic-waker v1.1.2
+  Downloaded atk v0.18.2
+  Downloaded calloop-wayland-source v0.3.0
+  Downloaded scopeguard v1.2.0
+  Downloaded proc-macro-crate v1.3.1
+  Downloaded renderdoc-sys v1.1.0
+  Downloaded clang-sys v1.9.1
+  Downloaded crypto-common v0.1.7
+  Downloaded schemars v0.8.22
+  Downloaded option-ext v0.2.0
+  Downloaded roxmltree v0.21.2
+  Downloaded polycool v0.4.0
+  Downloaded scoped-tls-hkt v0.1.5
+  Downloaded as-raw-xcb-connection v1.0.1
+  Downloaded javascriptcore-rs-sys v1.1.1
+  Downloaded same-file v1.0.6
+  Downloaded phf_shared v0.13.1
+  Downloaded parking v2.2.1
+  Downloaded schemars v1.2.2
+  Downloaded block-buffer v0.10.4
+  Downloaded cfg_aliases v0.2.2
+  Downloaded const-random v0.1.18
+  Downloaded rayon-core v1.13.0
+  Downloaded phf_generator v0.13.1
+  Downloaded by_address v1.2.1
+  Downloaded const-field-offset-macro v0.2.1
+  Downloaded cssparser-macros v0.6.1
+  Downloaded markup5ever v0.38.0
+  Downloaded ref-cast v1.0.27
+  Downloaded i-slint-backend-winit v1.18.1
+  Downloaded serde-untagged v0.1.9
+  Downloaded tracing-core v0.1.36
+  Downloaded wayland-sys v0.31.11
+  Downloaded phf_macros v0.13.1
+  Downloaded proc-macro2 v1.0.107
+  Downloaded rhai_codegen v3.2.0
+  Downloaded strsim v0.11.1
+  Downloaded unicode-segmentation v1.13.3
+  Downloaded byteorder-lite v0.1.0
+  Downloaded color_quant v1.1.0
+  Downloaded regex v1.13.1
+  Downloaded rgb v0.8.53
+  Downloaded crunchy v0.2.4
+  Downloaded pkg-config v0.3.34
+  Downloaded atty v0.2.14
+  Downloaded const-random-macro v0.1.16
+  Downloaded cfg-if v1.0.4
+  Downloaded darling_macro v0.23.0
+  Downloaded bit-set v0.8.0
+  Downloaded cargo-platform v0.1.9
+  Downloaded ctor v0.8.0
+  Downloaded async-recursion v1.1.1
+  Downloaded const-field-offset v0.2.1
+  Downloaded semver v1.0.28
+  Downloaded async-executor v1.14.0
+  Downloaded async-signal v0.2.14
+  Downloaded async-trait v0.1.92
+  Downloaded autocfg v1.5.1
+  Downloaded bit-vec v0.9.1
+  Downloaded convert_case v0.10.0
+  Downloaded countme v3.0.1
+  Downloaded critical-section v1.2.0
+  Downloaded ctor-proc-macro v0.0.7
+  Downloaded data-url v0.3.2
+  Downloaded cursor-icon v1.2.0
+  Downloaded async-broadcast v0.7.2
+  Downloaded async-process v2.5.0
+  Downloaded cairo-sys-rs v0.18.2
+  Downloaded cfg-expr v0.15.8
+  Downloaded crossbeam-epoch v0.9.21
+  Downloaded defmt v1.1.1
+  Downloaded parking_lot_core v0.9.12
+  Downloaded pico-args v0.5.0
+  Downloaded scoped-tls v1.0.1
+  Downloaded async-channel v2.5.0
+  Downloaded bit-vec v0.8.0
+  Downloaded bitflags v1.3.2
+  Downloaded cpufeatures v0.2.17
+  Downloaded dbus-tree v0.9.2
+  Downloaded prettyplease v0.2.37
+  Downloaded atk-sys v0.18.2
+  Downloaded auto-launch v0.5.0
+  Downloaded bit-set v0.10.0
+  Downloaded bs58 v0.5.1
+  Downloaded bytemuck_derive v1.12.1
+  Downloaded byteorder v1.5.0
+  Downloaded cargo_metadata v0.19.2
+  Downloaded cexpr v0.6.0
+  Downloaded concurrent-queue v2.5.0
+  Downloaded ctor v0.10.1
+  Downloaded defmt-macros v1.1.1
+  Downloaded native-tls v0.2.18
+  Downloaded rustversion v1.0.23
+  Downloaded serde_spanned v0.6.9
+  Downloaded arrayvec v0.7.8
+  Downloaded async-lock v3.4.2
+  Downloaded async-task v4.7.1
+  Downloaded bitflags v2.13.1
+  Downloaded blocking v1.7.0
+  Downloaded cairo-rs v0.18.5
+  Downloaded camino v1.2.5
+  Downloaded cargo_toml v0.22.3
+  Downloaded cfb v0.7.3
+  Downloaded clru v0.6.3
+  Downloaded cookie v0.18.2
+  Downloaded crossbeam-deque v0.8.8
+  Downloaded crossbeam-utils v0.8.22
+  Downloaded darling v0.23.0
+  Downloaded heck v0.5.0
+  Downloaded quick-xml v0.41.0
+  Downloaded selectors v0.36.1
+  Downloaded serialize-to-javascript-impl v0.1.2
+  Downloaded tauri-codegen v2.6.3
+  Downloaded async-io v2.6.0
+  Downloaded bincode v2.0.1
+  Downloaded bytes v1.12.1
+  Downloaded calloop v0.13.0
+  Downloaded codespan-reporting v0.13.1
+  Downloaded crc32fast v1.5.1
+  Downloaded cssparser v0.36.0
+  Downloaded darling_core v0.23.0
+  Downloaded typenum v1.20.1
+  Downloaded os_pipe v1.2.3
+  Downloaded parley v0.11.1
+  Downloaded pin-project-internal v1.1.13
+  Downloaded plist v1.10.0
+  Downloaded proc-macro-error-attr v1.0.4
+  Downloaded serialize-to-javascript v0.1.2
+  Downloaded slotmap v1.1.1
+  Downloaded smallvec v1.16.5
+  Downloaded tendril v0.5.1
+  Downloaded base64 v0.22.1
+  Downloaded base64 v0.23.1
+  Downloaded borsh v1.8.1
+  Downloaded bytemuck v1.25.2
+  Downloaded calloop v0.14.5
+  Downloaded cc v1.4.4
+  Downloaded crossbeam-channel v0.5.16
+  Downloaded wayland-protocols-plasma v0.3.12
+  Downloaded png v0.18.1
+  Downloaded pulldown-cmark v0.13.5
+  Downloaded schemars v0.9.0
+  Downloaded serde_core v1.0.229
+  Downloaded bindgen v0.72.1
+  Downloaded dbus v0.9.12
+  Downloaded dom_query v0.27.0
+  Downloaded precomputed-hash v0.1.1
+  Downloaded regex-automata v0.4.18
+  Downloaded futures-executor v0.3.34
+  Downloaded hashbrown v0.15.5
+  Downloaded input v0.10.0
+  Downloaded unicode-width v0.1.14
+  Downloaded rayon v1.12.0
+  Downloaded rustix v0.38.44
+  Downloaded chrono v0.4.45
+  Downloaded clap v2.34.0
+  Downloaded float-cmp v0.9.0
+  Downloaded indexmap v1.9.3
+  Downloaded moxcms v0.8.1
+  Downloaded no-std-compat v0.4.1
+  Downloaded unicode-width v0.2.3
+  Downloaded winnow v0.5.40
+  Downloaded wry v0.55.1
+  Downloaded png v0.17.16
+  Downloaded allocator-api2 v0.2.21
+  Downloaded time-core v0.1.9
+  Downloaded alloc-no-stdlib v2.0.4
+  Downloaded serde_derive_internals v0.29.1
+  Downloaded syn v3.0.4
+  Downloaded alloc-stdlib v0.2.4
+  Downloaded time v0.3.55
+  Downloaded ash v0.38.0+1.3.281
+  Downloaded linebender_resource_handle v0.1.1
+  Downloaded zerocopy v0.8.57
+  Downloaded stable_deref_trait v1.2.1
+  Downloaded aho-corasick v1.1.5
+  Downloaded brotli v8.0.4
+  Downloaded wayland-protocols-wlr v0.3.12
+  Downloaded thiserror-impl v2.0.20
+  Downloaded font-types v0.12.7
+  Downloaded gethostname v1.1.0
+  Downloaded zeno v0.3.3
+  Downloaded glutin_egl_sys v0.7.1
+  Downloaded gdk v0.18.2
+  Downloaded glutin-winit v0.5.0
+  Downloaded regex-syntax v0.8.11
+  Downloaded version_check v0.9.5
+  Downloaded zerofrom-derive v0.1.7
+  Downloaded rustix v1.1.4
+  Downloaded image v0.25.10
+  Downloaded fontdb v0.24.0
+  Downloaded http v1.5.0
+  Downloaded petgraph v0.8.3
+  Downloaded jiff-core v0.1.0
+  Downloaded linux-raw-sys v0.4.15
+  Downloaded i-slint-renderer-skia v1.18.1
+  Downloaded icu_plurals_data v2.3.0
+  Downloaded hashbrown v0.17.1
+  Downloaded slab v0.4.12
+  Downloaded icu_normalizer v2.3.0
+  Downloaded toml_datetime v1.1.1+spec-1.1.0
+  Downloaded tar v0.4.46
+  Downloaded i-slint-backend-testing v1.18.1
+  Downloaded unic-common v0.9.0
+  Downloaded libm v0.2.16
+  Downloaded getrandom v0.2.17
+  Downloaded ico v0.5.0
+  Downloaded libdbus-sys v0.2.7
+  Downloaded log v0.4.34
+  Downloaded xcursor v0.3.11
+  Downloaded icu_decimal_data v2.3.0
+  Downloaded litemap v0.8.3
+  Downloaded tinyvec_macros v0.1.1
+  Downloaded dtor-proc-macro v0.0.6
+  Downloaded icu_locale_core v2.3.0
+  Downloaded ttf-parser v0.25.1
+  Downloaded mime v0.3.17
+  Downloaded tree_magic_mini v3.2.2
+  Downloaded iana-time-zone v0.1.65
+  Downloaded icu_decimal v2.3.0
+  Downloaded vec_map v0.8.2
+  Downloaded gl_generator v0.14.0
+  Downloaded windows-future v0.3.2
+  Downloaded yazi v0.2.1
+  Downloaded spirv v0.4.0+sdk-1.4.341.0
+  Downloaded tracing-attributes v0.1.31
+  Downloaded find-msvc-tools v0.1.11
+  Downloaded i-slint-renderer-software v1.18.1
+  Downloaded uuid v1.26.0
+  Downloaded web_atoms v0.2.6
+  Downloaded yoke v0.8.3
+  Downloaded zbus_macros v5.19.0
+  Downloaded io-lifetimes v1.0.11
+  Downloaded wayland-client v0.31.15
+  Downloaded gio-sys v0.18.1
+  Downloaded foldhash v0.1.5
+  Downloaded futures-core v0.3.34
+  Downloaded fnv v1.0.7
+  Downloaded foldhash v0.2.0
+  Downloaded i-slint-core-macros v1.18.1
+  Downloaded utf8_iter v1.0.4
+  Downloaded wayland-scanner v0.31.11
+  Downloaded lock_api v0.4.14
+  Downloaded wayland-cursor v0.31.14
+  Downloaded servo_arc v0.4.3
+  Downloaded libseat v0.2.4
+  Downloaded serde_repr v0.1.21
+  Downloaded hashbrown v0.16.1
+  Downloaded writeable v0.6.4
+  Downloaded dirs v6.0.0
+  Downloaded dirs-sys v0.3.7
+  Downloaded fixedbitset v0.5.7
+  Downloaded image-webp v0.2.4
+  Downloaded tracing v0.1.44
+  Downloaded zune-jpeg v0.5.15
+  Downloaded dtoa-short v0.3.5
+  Downloaded toml_parser v1.1.3+spec-1.1.0
+  Downloaded wayland-csd-frame v0.3.0
+  Downloaded zcheapstr v1.1.0
+  Downloaded zerofrom v0.1.8
+  Downloaded zmij v1.0.23
+  Downloaded new_debug_unreachable v1.0.6
+  Downloaded lazy_static v1.5.1
+  Downloaded tauri-winres v0.3.6
+  Downloaded event-listener-strategy v0.5.4
+  Downloaded toml_writer v1.1.2+spec-1.1.0
+  Downloaded tokio-macros v2.7.2
+  Downloaded tray-icon v0.24.2
+  Downloaded deranged v0.5.8
+  Downloaded drm-fourcc v2.2.0
+  Downloaded dunce v1.0.5
+  Downloaded event-listener v5.4.2
+  Downloaded natord v1.0.9
+  Downloaded nom v7.1.3
+  Downloaded unicode-script v0.5.8
+  Downloaded yoke-derive v0.8.2
+  Downloaded zerovec-derive v0.11.6
+  Downloaded zune-core v0.5.3
+  Downloaded tauri-runtime v2.11.3
+  Downloaded errno v0.3.14
+  Downloaded gtk3-macros v0.18.2
+  Downloaded zerocopy-derive v0.8.57
+  Downloaded owned_ttf_parser v0.25.1
+  Downloaded pxfm v0.1.30
+  Downloaded strsim v0.8.0
+  Downloaded dirs v4.0.0
+  Downloaded gdk-sys v0.18.2
+  Downloaded webbrowser v1.2.5
+  Downloaded webkit2gtk-sys v2.0.2
+  Downloaded yeslogic-fontconfig-sys v6.0.1
+  Downloaded vtable-macro v0.5.0
+  Downloaded tauri-plugin-autostart v2.5.1
+  Downloaded dlopen2 v0.8.2
+  Downloaded weezl v0.1.12
+  Downloaded defmt-parser v1.0.0
+  Downloaded futures-sink v0.3.34
+  Downloaded rhai v1.26.1
+  Downloaded derive_more v2.1.1
+  Downloaded filetime v0.2.29
+  Downloaded fixed_decimal v0.7.3
+  Downloaded flate2 v1.1.10
+  Downloaded grid v1.0.1
+  Downloaded lyon_algorithms v1.0.22
+  Downloaded unicode-vo v0.1.0
+  Downloaded version-compare v0.2.1
+  Downloaded vtable v0.5.0
+  Downloaded walkdir v2.5.0
+  Downloaded wayland-backend v0.3.17
+  Downloaded zbus_names v4.3.4
+  Downloaded zerotrie v0.2.5
+  Downloaded zerovec v0.11.8
+  Downloaded zvariant_derive v5.15.0
+  Downloaded simplecss v0.2.2
+  Downloaded spin v0.5.2
+  Downloaded tinyvec v1.12.0
+  Downloaded dbus-codegen v0.9.1
+  Downloaded derive_more-impl v2.1.1
+  Downloaded dtor v0.3.0
+  Downloaded futures-macro v0.3.34
+  Downloaded icu_collections v2.3.0
+  Downloaded idna_adapter v1.2.2
+  Downloaded naga-types v30.0.1
+  Downloaded wgpu-core-deps-windows-linux-android v30.0.1
+  Downloaded winnow v0.7.15
+  Downloaded soup3 v0.5.0
+  Downloaded strum_macros v0.28.0
+  Downloaded erased-serde v0.4.10
+  Downloaded memmap2 v0.9.12
+  Downloaded unicode-bidi v0.3.18
+  Downloaded urlpattern v0.3.0
+  Downloaded tauri-plugin-single-instance v2.4.4
+  Downloaded ident_case v1.0.1
+  Downloaded toml_edit v0.19.15
+  Downloaded dlib v0.5.3
+  Downloaded drm-ffi v0.9.1
+  Downloaded fdeflate v0.3.7
+  Downloaded html5ever v0.38.0
+  Downloaded mio v1.2.3
+  Downloaded url v2.5.8
+  Downloaded usvg v0.48.1
+  Downloaded wayland-protocols v0.32.13
+  Downloaded windows-result v0.4.1
+  Downloaded zbus v5.19.0
+  Downloaded zlib-rs v0.6.7
+  Downloaded zvariant v5.15.0
+  Downloaded zvariant_utils v4.2.0
+  Downloaded serde_with v3.22.0
+  Downloaded tauri-build v2.6.3
+  Downloaded dtor v0.8.1
+  Downloaded displaydoc v0.2.7
+  Downloaded enumflags2_derive v0.7.12
+  Downloaded wgpu v30.0.1
+  Downloaded toml v0.9.12+spec-1.1.0
+  Downloaded i-slint-common v1.18.1
+  Downloaded icu_properties_data v2.3.0
+  Downloaded javascriptcore-rs v1.1.2
+  Downloaded syn v1.0.109
+  Downloaded wgpu-core v30.0.1
+  Downloaded smol_str v0.3.7
+  Downloaded vcpkg v0.2.15
+  Downloaded syn v2.0.119
+  Downloaded tokio v1.53.1
+  Downloaded gio v0.18.4
+  Downloaded drm v0.14.1
+  Downloaded digest v0.10.7
+  Downloaded field-offset v0.3.6
+  Downloaded icu_locale_fallback v2.3.0
+  Downloaded windows-strings v0.5.1
+  Downloaded xkbcommon v0.9.0
+  Downloaded sha2 v0.10.9
+  Downloaded fontique v0.11.1
+  Downloaded string_cache v0.9.0
+  Downloaded json-patch v3.0.1
+  Downloaded unicode-ident v1.0.24
+  Downloaded snafu v0.8.9
+  Downloaded litrs v1.0.1
+  Downloaded adler2 v2.0.1
+  Downloaded gdkx11 v0.18.2
+  Downloaded strict-num v0.1.1
+  Downloaded downcast-rs v1.2.1
+  Downloaded typed-index-collections v3.5.0
+  Downloaded x11 v2.21.0
+  Downloaded strum v0.28.0
+  Downloaded document-features v0.2.12
+  Downloaded windows-implement v0.60.2
+  Downloaded ab_glyph_rasterizer v0.1.10
+  Downloaded serde_spanned v1.1.1
+  Downloaded drm-sys v0.8.1
+  Downloaded memoffset v0.9.1
+  Downloaded toml_datetime v0.6.3
+  Downloaded libloading v0.7.4
+  Downloaded tauri-plugin v2.6.3
+  Downloaded hex v0.4.3
+  Downloaded jiff v0.2.35
+  Downloaded either v1.19.0
+  Downloaded htmlparser v0.2.1
+  Downloaded icu_locale_fallback_data v2.3.0
+  Downloaded libudev-sys v0.1.4
+  Downloaded wgpu-naga-bridge v30.0.1
+  Downloaded jobserver v0.1.35
+  Downloaded thiserror v2.0.20
+  Downloaded dtoa v1.0.11
+  Downloaded embed-resource v3.0.11
+  Downloaded ahash v0.8.12
+  Downloaded windows-link v0.2.1
+  Downloaded soup3-sys v0.5.0
+  Downloaded gtk v0.18.2
+  Downloaded tinystr v0.8.4
+  Downloaded gdkx11-sys v0.18.2
+  Downloaded gpu-allocator v0.28.0
+  Downloaded taffy v0.10.1
+  Downloaded keyboard-types v0.7.0
+  Downloaded typeid v1.0.3
+  Downloaded shlex v1.3.0
+  Downloaded thiserror-impl v1.0.69
+  Downloaded dpi v0.1.2
+  Downloaded futures v0.3.34
+  Downloaded glib-macros v0.18.5
+  Downloaded glutin v0.32.3
+  Downloaded icu_plurals v2.3.0
+  Downloaded windows-collections v0.3.2
+  Downloaded spin_on v0.1.1
+  Downloaded gtk-sys v0.18.2
+  Downloaded icu_provider v2.3.1
+  Downloaded lyon_geom v1.0.20
+  Downloaded muda v0.19.3
+  Downloaded udev v0.9.3
+  Downloaded unicase v2.10.0
+  Downloaded webkit2gtk v2.0.2
+  Downloaded windows-core v0.62.2
+  Downloaded shlex v2.0.1
+  Downloaded skrifa v0.44.0
+  Downloaded string_cache_codegen v0.6.1
+  Downloaded system-deps v6.2.2
+  Downloaded tauri-runtime-wry v2.11.4
+  Downloaded dlopen2_derive v0.4.3
+  Downloaded euclid v0.22.14
+  Downloaded generic-array v0.14.7
+  Downloaded i-slint-backend-linuxkms v1.18.1
+  Downloaded i-slint-backend-selector v1.18.1
+  Downloaded infer v0.19.0
+  Downloaded itertools v0.13.0
+  Downloaded itertools v0.15.0
+  Downloaded lyon_path v1.0.19
+  Downloaded minimal-lexical v0.2.1
+  Downloaded ureq v2.12.1
+  Downloaded x11-dl v2.21.0
+  Downloaded tauri-utils v2.9.3
+  Downloaded gdk-pixbuf v0.18.5
+  Downloaded input-sys v1.19.0
+  Downloaded idna v1.1.0
+  Downloaded nom v8.0.0
+  Downloaded toml_edit v0.25.13+spec-1.1.0
+  Downloaded linux-raw-sys v0.12.1
+  Downloaded thin-vec v0.2.19
+  Downloaded foreign-types v0.3.2
+  Downloaded wgpu-hal v30.0.1
+  Downloaded serde_with_macros v3.22.0
+  Downloaded textwrap v0.11.0
+  Downloaded tiny-skia-path v0.11.4
+  Downloaded libloading v0.8.9
+  Downloaded xml-rs v0.8.29
+  Downloaded smol_str v0.2.2
+  Downloaded futures-task v0.3.34
+  Downloaded i-slint-compiler v1.18.1
+  Downloaded simd-adler32 v0.3.10
+  Downloaded windows-threading v0.2.1
+  Downloaded static_assertions v1.1.0
+  Downloaded futures-lite v2.6.1
+  Downloaded lyon_extra v1.1.0
+  Downloaded annotate-snippets v0.12.17
+  Downloaded miniz_oxide v0.8.9
+  Downloaded dyn-clone v1.0.20
+  Downloaded endi v1.1.1
+  Downloaded memchr v2.8.3
+  Downloaded winnow v1.0.4
+  Downloaded x11rb v0.13.2
+  Downloaded fastrand v2.5.0
+  Downloaded futures-io v0.3.34
+  Downloaded jsonptr v0.6.3
+  Downloaded tauri-macros v2.6.3
+  Downloaded toml_edit v0.20.2
+  Downloaded foreign-types-shared v0.1.1
+  Downloaded linux-raw-sys v0.9.4
+  Downloaded tiny-keccak v2.0.2
+  Downloaded toml v0.8.2
+  Downloaded nix v0.31.3
+  Downloaded target-lexicon v0.12.16
+  Downloaded windows-numerics v0.3.1
+  Downloaded dirs-sys v0.5.0
+  Downloaded smartstring v1.0.1
+  Downloaded thiserror v1.0.69
+  Downloaded xkeysym v0.2.1
+  Downloaded half v2.7.1
+  Downloaded itoa v1.0.18
+  Downloaded xkbcommon-dl v0.4.2
+  Downloaded glib-sys v0.18.1
+  Downloaded i-slint-core v1.18.1
+  Downloaded glob v0.3.4
+  Downloaded naga v30.0.1
+  Downloaded imgref v1.12.3
+  Downloaded unic-char-property v0.9.0
+  Downloaded smithay-client-toolkit v0.19.2
+  Downloaded sys-locale v0.3.2
+  Downloaded enumflags2 v0.7.12
+  Downloaded form_urlencoded v1.2.2
+  Downloaded hashbrown v0.12.3
+  Downloaded kurbo v0.13.1
+  Downloaded unty v0.0.4
+  Downloaded xattr v1.6.1
+  Downloaded tauri v2.11.5
+  Downloaded glow v0.18.0
+  Downloaded ksni v0.2.2
+  Downloaded wl-clipboard-rs v0.9.5
+  Downloaded xmlwriter v0.1.0
+  Downloaded softbuffer v0.4.8
+  Downloaded libc v0.2.189
+  Downloaded windows-interface v0.59.3
+  Downloaded synstructure v0.13.2
+  Downloaded libappindicator v0.9.0
+  Downloaded slint-build v1.18.1
+  Downloaded gdk-pixbuf-sys v0.18.0
+  Downloaded icu_normalizer_data v2.3.0
+  Downloaded indexmap v2.14.1
+  Downloaded unic-ucd-version v0.9.0
+  Downloaded unicode-linebreak v0.1.5
+  Downloaded signal-hook-registry v1.4.8
+  Downloaded svgtypes v0.16.1
+  Downloaded equivalent v1.0.2
+  Downloaded heck v0.4.1
+  Downloaded unic-char-range v0.9.0
+  Downloaded unic-ucd-ident v0.9.0
+  Downloaded glutin_glx_sys v0.6.1
+  Downloaded time-macros v0.2.32
+  Downloaded libappindicator-sys v0.9.0
+  Downloaded toml_datetime v0.7.5+spec-1.1.0
+  Downloaded tiny-xlib v0.2.5
+  Downloaded futures-channel v0.3.34
+  Downloaded toml v1.1.5+spec-1.1.0
+  Downloaded miniz_oxide v0.9.1
+  Downloaded getrandom v0.3.4
+  Downloaded futures-util v0.3.34
+  Downloaded getrandom v0.4.3
+  Downloaded i-slint-backend-qt v1.18.1
+  Downloaded unicode-xid v0.2.6
+  Downloaded swash v0.2.10
+  Downloaded hashbrown v0.14.5
+  Downloaded slint v1.18.1
+  Downloaded text-size v1.1.1
+  Downloaded tiny-skia v0.11.4
+  Downloaded skia-bindings v0.153.3
+  Downloaded tiny-skia v0.12.0
+  Downloaded glib v0.18.5
+  Downloaded socket2 v0.6.5
+  Downloaded gif v0.14.2
+  Downloaded harfrust v0.12.0
+  Downloaded x11rb-protocol v0.13.2
+  Downloaded siphasher v1.0.3
+  Downloaded skia-safe v0.153.3
+  Downloaded winit v0.30.13
+  Downloaded imagesize v0.15.0
+  Downloaded libseat-sys v0.2.0
+  Downloaded gobject-sys v0.18.0
+  Downloaded slint-macros v1.18.1
+  Downloaded wgpu-types v30.0.1
+  Downloaded icu_segmenter_data v2.3.0
+  Downloaded icu_segmenter v2.3.0
+  Downloaded tao v0.35.3
+  Downloaded snafu-derive v0.8.9
+  Downloaded gdkwayland-sys v0.18.2
+  Downloaded slint-interpreter v1.18.1
+  Downloaded khronos_api v3.1.0
+  Downloaded tiny-skia-path v0.12.0
+  Downloaded windows v0.62.2
+   Compiling quote v1.0.47
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.24
+   Compiling serde_core v1.0.229
+   Compiling pkg-config v0.3.34
+   Compiling libc v0.2.189
+   Compiling syn v3.0.4
+   Compiling syn v2.0.119
+   Compiling serde v1.0.229
+   Compiling foldhash v0.2.0
+   Compiling hashbrown v0.17.1
+   Compiling smallvec v1.16.5
+   Compiling equivalent v1.0.2
+   Compiling indexmap v2.14.1
+   Compiling heck v0.5.0
+   Compiling version_check v0.9.5
+   Compiling autocfg v1.5.1
+   Compiling synstructure v0.13.2
+   Compiling portable-atomic v1.15.0
+   Compiling winnow v0.5.40
+   Compiling critical-section v1.2.0
+   Compiling bitflags v2.13.1
+   Compiling once_cell v1.21.4
+   Compiling target-lexicon v0.12.16
+   Compiling memchr v2.8.3
+   Compiling cfg-expr v0.15.8
+   Compiling version-compare v0.2.1
+   Compiling cfg-if v1.0.4
+   Compiling icu_properties_data v2.3.0
+   Compiling siphasher v1.0.3
+   Compiling icu_normalizer_data v2.3.0
+   Compiling thiserror v1.0.69
+   Compiling pin-project-lite v0.2.17
+   Compiling stable_deref_trait v1.2.1
+   Compiling winnow v1.0.4
+   Compiling log v0.4.34
+   Compiling toml_writer v1.1.2+spec-1.1.0
+   Compiling thiserror v2.0.20
+   Compiling toml_parser v1.1.3+spec-1.1.0
+   Compiling crc32fast v1.5.1
+   Compiling toml_datetime v1.1.1+spec-1.1.0
+   Compiling writeable v0.6.4
+   Compiling zmij v1.0.23
+   Compiling slab v0.4.12
+   Compiling find-msvc-tools v0.1.11
+   Compiling shlex v2.0.1
+   Compiling cc v1.4.4
+   Compiling futures-core v0.3.34
+   Compiling semver v1.0.28
+   Compiling unicode-segmentation v1.13.3
+   Compiling litemap v0.8.3
+   Compiling convert_case v0.10.0
+   Compiling unicode-xid v0.2.6
+   Compiling futures-io v0.3.34
+   Compiling libm v0.2.16
+   Compiling memoffset v0.9.1
+   Compiling num-traits v0.2.19
+   Compiling itoa v1.0.18
+   Compiling parking_lot_core v0.9.12
+   Compiling serde_derive v1.0.229
+   Compiling displaydoc v0.2.7
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.6
+   Compiling bytemuck_derive v1.12.1
+   Compiling thiserror-impl v1.0.69
+   Compiling zerofrom v0.1.8
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling thiserror-impl v2.0.20
+   Compiling toml_datetime v0.6.3
+   Compiling serde_spanned v0.6.9
+   Compiling toml_edit v0.20.2
+   Compiling tinystr v0.8.4
+   Compiling icu_locale_core v2.3.0
+   Compiling toml v0.8.2
+   Compiling system-deps v6.2.2
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling icu_provider v2.3.1
+   Compiling derive_more-impl v2.1.1
+   Compiling quick-xml v0.41.0
+   Compiling rustc_version v0.4.1
+   Compiling phf_shared v0.13.1
+   Compiling libloading v0.8.9
+   Compiling glib-sys v0.18.1
+   Compiling gobject-sys v0.18.0
+   Compiling gio-sys v0.18.1
+   Compiling serde_json v1.0.151
+   Compiling futures-sink v0.3.34
+   Compiling fastrand v2.5.0
+   Compiling utf8_iter v1.0.4
+   Compiling icu_collections v2.3.0
+   Compiling phf_generator v0.13.1
+   Compiling futures-channel v0.3.34
+   Compiling futures-macro v0.3.34
+   Compiling rustix v1.1.4
+   Compiling futures-task v0.3.34
+   Compiling simd-adler32 v0.3.10
+   Compiling futures-util v0.3.34
+   Compiling icu_locale_fallback_data v2.3.0
+   Compiling linux-raw-sys v0.12.1
+   Compiling adler2 v2.0.1
+   Compiling icu_normalizer v2.3.0
+   Compiling futures-executor v0.3.34
+   Compiling icu_properties v2.3.0
+   Compiling dlib v0.5.3
+   Compiling idna_adapter v1.2.2
+   Compiling miniz_oxide v0.9.1
+   Compiling bytemuck v1.25.2
+   Compiling percent-encoding v2.3.2
+   Compiling form_urlencoded v1.2.2
+   Compiling flate2 v1.1.10
+   Compiling idna v1.1.0
+   Compiling proc-macro-error-attr v1.0.4
+   Compiling syn v1.0.109
+   Compiling url v2.5.8
+   Compiling miniz_oxide v0.8.9
+   Compiling fdeflate v0.3.7
+   Compiling gdk-sys v0.18.2
+   Compiling toml_edit v0.25.13+spec-1.1.0
+   Compiling proc-macro-error v1.0.4
+   Compiling icu_decimal_data v2.3.0
+   Compiling proc-macro-crate v3.5.0
+   Compiling phf_macros v0.13.1
+   Compiling field-offset v0.3.6
+   Compiling arrayvec v0.7.8
+   Compiling typeid v1.0.3
+   Compiling pulldown-cmark v0.13.5
+   Compiling crossbeam-utils v0.8.22
+   Compiling cairo-sys-rs v0.18.2
+   Compiling pango-sys v0.18.0
+   Compiling derive_more v2.1.1
+   Compiling gdk-pixbuf-sys v0.18.0
+   Compiling proc-macro-crate v2.0.2
+   Compiling num-conv v0.2.2
+   Compiling heck v0.4.1
+   Compiling time-core v0.1.9
+   Compiling font-types v0.12.7
+   Compiling phf_codegen v0.13.1
+   Compiling atk-sys v0.18.2
+   Compiling wayland-sys v0.31.11
+   Compiling erased-serde v0.4.10
+   Compiling strsim v0.11.1
+   Compiling glib-macros v0.18.5
+   Compiling ident_case v1.0.1
+   Compiling darling_core v0.23.0
+   Compiling read-fonts v0.41.0
+   Compiling wayland-backend v0.3.17
+   Compiling slotmap v1.1.1
+   Compiling generic-array v0.14.7
+   Compiling scoped-tls v1.0.1
+   Compiling new_debug_unreachable v1.0.6
+   Compiling downcast-rs v1.2.1
+   Compiling anyhow v1.0.104
+   Compiling float-cmp v0.9.0
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling strict-num v0.1.1
+   Compiling glib v0.18.5
+   Compiling darling_macro v0.23.0
+   Compiling phf v0.13.1
+   Compiling polycool v0.4.0
+   Compiling darling v0.23.0
+   Compiling string_cache_codegen v0.6.1
+   Compiling gtk-sys v0.18.2
+   Compiling wayland-client v0.31.15
+   Compiling tinyvec_macros v0.1.1
+   Compiling parking v2.2.1
+   Compiling getrandom v0.4.3
+   Compiling precomputed-hash v0.1.1
+   Compiling arrayref v0.3.9
+   Compiling gio v0.18.4
+   Compiling tiny-skia-path v0.12.0
+   Compiling web_atoms v0.2.6
+   Compiling tinyvec v1.12.0
+   Compiling serde_with_macros v3.22.0
+   Compiling kurbo v0.13.1
+   Compiling parking_lot v0.12.5
+   Compiling skrifa v0.44.0
+   Compiling png v0.18.1
+   Compiling wayland-scanner v0.31.11
+   Compiling strum_macros v0.28.0
+   Compiling serde_spanned v1.1.1
+   Compiling yeslogic-fontconfig-sys v6.0.1
+   Compiling ctor-proc-macro v0.0.7
+   Compiling byteorder-lite v0.1.0
+   Compiling zune-core v0.5.3
+   Compiling zune-jpeg v0.5.15
+   Compiling fontdb v0.24.0
+   Compiling string_cache v0.9.0
+   Compiling svgtypes v0.16.1
+   Compiling harfrust v0.12.0
+   Compiling simplecss v0.2.2
+   Compiling roxmltree v0.21.2
+   Compiling color_quant v1.1.0
+   Compiling unicode-bidi v0.3.18
+   Compiling weezl v0.1.12
+   Compiling xmlwriter v0.1.0
+   Compiling base64 v0.23.1
+   Compiling data-url v0.3.2
+   Compiling quick-error v2.0.1
+   Compiling unicode-script v0.5.8
+   Compiling imagesize v0.15.0
+   Compiling dtoa v1.0.11
+   Compiling unicode-vo v0.1.0
+   Compiling pico-args v0.5.0
+   Compiling usvg v0.48.1
+   Compiling dtoa-short v0.3.5
+   Compiling image-webp v0.2.4
+   Compiling gif v0.14.2
+   Compiling uuid v1.26.0
+   Compiling icu_locale_fallback v2.3.0
+   Compiling tiny-skia v0.12.0
+   Compiling tendril v0.5.1
+   Compiling selectors v0.36.1
+   Compiling rgb v0.8.53
+   Compiling polling v3.11.0
+   Compiling dpi v0.1.2
+   Compiling fixed_decimal v0.7.3
+   Compiling cssparser-macros v0.6.1
+   Compiling memmap2 v0.9.12
+   Compiling aho-corasick v1.1.5
+   Compiling indexmap v1.9.3
+   Compiling alloc-no-stdlib v2.0.4
+   Compiling unicase v2.10.0
+   Compiling regex-syntax v0.8.11
+   Compiling byteorder v1.5.0
+   Compiling parlance v0.1.1
+   Compiling unic-char-range v0.9.0
+   Compiling unic-common v0.9.0
+   Compiling linebender_resource_handle v0.1.1
+   Compiling rustversion v1.0.23
+   Compiling camino v1.2.5
+   Compiling fontique v0.11.1
+   Compiling unic-char-property v0.9.0
+   Compiling unic-ucd-version v0.9.0
+   Compiling regex-automata v0.4.18
+   Compiling alloc-stdlib v0.2.4
+   Compiling cssparser v0.36.0
+   Compiling icu_decimal v2.3.0
+   Compiling resvg v0.48.1
+   Compiling markup5ever v0.38.0
+   Compiling toml v1.1.5+spec-1.1.0
+   Compiling enumflags2_derive v0.7.12
+   Compiling servo_arc v0.4.3
+   Compiling serde_derive_internals v0.29.1
+   Compiling libdbus-sys v0.2.7
+   Compiling x11-dl v2.21.0
+   Compiling getrandom v0.3.4
+   Compiling schemars v0.8.22
+   Compiling bit-vec v0.8.0
+   Compiling hashbrown v0.12.3
+   Compiling raw-window-handle v0.6.2
+   Compiling htmlparser v0.2.1
+   Compiling rustc-hash v2.1.3
+   Compiling deranged v0.5.8
+   Compiling crossbeam-epoch v0.9.21
+   Compiling powerfmt v0.2.0
+   Compiling crunchy v0.2.4
+   Compiling fnv v1.0.7
+   Compiling cfb v0.7.3
+   Compiling time v0.3.55
+   Compiling i-slint-common v1.18.1
+   Compiling schemars_derive v0.8.22
+   Compiling bit-set v0.8.0
+   Compiling html5ever v0.38.0
+   Compiling brotli-decompressor v5.0.3
+   Compiling regex v1.13.1
+   Compiling unic-ucd-ident v0.9.0
+   Compiling pango v0.18.3
+   Compiling gdk-pixbuf v0.18.5
+   Compiling cairo-rs v0.18.5
+   Compiling event-listener v5.4.2
+   Compiling concurrent-queue v2.5.0
+   Compiling num_enum_derive v0.7.6
+   Compiling jsonptr v0.6.3
+   Compiling toml_edit v0.19.15
+   Compiling cargo-platform v0.1.9
+   Compiling zvariant_utils v4.2.0
+   Compiling crossbeam-deque v0.8.8
+   Compiling base64 v0.22.1
+   Compiling bytes v1.12.1
+   Compiling same-file v1.0.6
+   Compiling dyn-clone v1.0.20
+   Compiling tiny-keccak v2.0.2
+   Compiling dunce v1.0.5
+   Compiling http v1.5.0
+   Compiling walkdir v2.5.0
+   Compiling plist v1.10.0
+   Compiling zvariant_derive v5.15.0
+   Compiling cargo_metadata v0.19.2
+   Compiling proc-macro-crate v1.3.1
+   Compiling json-patch v3.0.1
+   Compiling gdk v0.18.2
+   Compiling event-listener-strategy v0.5.4
+   Compiling urlpattern v0.3.0
+   Compiling brotli v8.0.4
+   Compiling dom_query v0.27.0
+   Compiling serde-untagged v0.1.9
+   Compiling infer v0.19.0
+   Compiling futures-lite v2.6.1
+   Compiling euclid v0.22.14
+   Compiling wayland-protocols v0.32.13
+   Compiling ctor v0.8.0
+   Compiling serde_with v3.22.0
+   Compiling gtk v0.18.2
+   Compiling cfg_aliases v0.2.2
+   Compiling rustix v0.38.44
+   Compiling rayon-core v1.13.0
+   Compiling glob v0.3.4
+   Compiling tauri-utils v2.9.3
+   Compiling lyon_geom v1.0.20
+   Compiling gtk3-macros v0.18.2
+   Compiling atk v0.18.2
+   Compiling snafu-derive v0.8.9
+   Compiling tracing-attributes v0.1.31
+   Compiling getrandom v0.2.17
+   Compiling tracing-core v0.1.36
+   Compiling async-io v2.6.0
+   Compiling zerocopy v0.8.57
+   Compiling pxfm v0.1.30
+   Compiling either v1.19.0
+   Compiling icu_segmenter_data v2.3.0
+   Compiling unicode-width v0.2.3
+   Compiling linux-raw-sys v0.4.15
+   Compiling rspolib v0.1.2
+   Compiling tracing v0.1.44
+   Compiling moxcms v0.8.1
+   Compiling snafu v0.8.9
+   Compiling const-random-macro v0.1.16
+   Compiling lyon_path v1.0.19
+   Compiling wayland-protocols-wlr v0.3.12
+   Compiling enumflags2 v0.7.12
+   Compiling zcheapstr v1.1.0
+   Compiling errno v0.3.14
+   Compiling ahash v0.8.12
+   Compiling foldhash v0.1.5
+   Compiling endi v1.1.1
+   Compiling zeno v0.3.3
+   Compiling natord v1.0.9
+   Compiling bitflags v1.3.2
+   Compiling hashbrown v0.14.5
+   Compiling rustc-hash v1.1.0
+   Compiling yazi v0.2.1
+   Compiling unicode-linebreak v0.1.5
+   Compiling async-task v4.7.1
+   Compiling i-slint-compiler v1.18.1
+   Compiling anstyle v1.0.14
+   Compiling text-size v1.1.1
+   Compiling lazy_static v1.5.1
+   Compiling as-raw-xcb-connection v1.0.1
+   Compiling vcpkg v0.2.15
+   Compiling countme v3.0.1
+   Compiling rowan v0.17.0
+   Compiling openssl-sys v0.9.117
+   Compiling annotate-snippets v0.12.17
+   Compiling swash v0.2.10
+   Compiling zvariant v5.15.0
+   Compiling hashbrown v0.15.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling lyon_extra v1.1.0
+   Compiling rayon v1.12.0
+   Compiling image v0.25.10
+   Compiling const-random v0.1.18
+   Compiling calloop v0.13.0
+   Compiling itertools v0.15.0
+   Compiling async-channel v2.5.0
+   Compiling num_enum v0.7.6
+   Compiling strum v0.28.0
+   Compiling gethostname v1.1.0
+   Compiling javascriptcore-rs-sys v1.1.1
+   Compiling soup3-sys v0.5.0
+   Compiling const-field-offset-macro v0.2.1
+   Compiling serde_repr v0.1.21
+   Compiling toml_datetime v0.7.5+spec-1.1.0
+   Compiling smol_str v0.3.7
+   Compiling allocator-api2 v0.2.21
+   Compiling by_address v1.2.1
+   Compiling typed-index-collections v3.5.0
+   Compiling option-ext v0.2.0
+   Compiling cursor-icon v1.2.0
+   Compiling ttf-parser v0.25.1
+   Compiling pin-utils v0.1.1
+   Compiling xcursor v0.3.11
+   Compiling winnow v0.7.15
+   Compiling xkeysym v0.2.1
+   Compiling smithay-client-toolkit v0.19.2
+   Compiling fixedbitset v0.5.7
+   Compiling atomic-waker v1.1.2
+   Compiling x11rb-protocol v0.13.2
+   Compiling piper v0.2.5
+   Compiling petgraph v0.8.3
+   Compiling toml v0.9.12+spec-1.1.0
+   Compiling x11rb v0.13.2
+   Compiling owned_ttf_parser v0.25.1
+   Compiling wayland-cursor v0.31.14
+   Compiling spin_on v0.1.1
+   Compiling wayland-csd-frame v0.3.0
+   Compiling dirs-sys v0.5.0
+   Compiling hashbrown v0.16.1
+   Compiling const-field-offset v0.2.1
+   Compiling calloop-wayland-source v0.3.0
+   Compiling icu_segmenter v2.3.0
+   Compiling async-signal v0.2.14
+   Compiling zbus_names v4.3.4
+   Compiling async-lock v3.4.2
+   Compiling embed-resource v3.0.11
+   Compiling tiny-skia-path v0.11.4
+   Compiling time-macros v0.2.32
+   Compiling parley_data v0.11.1
+   Compiling webkit2gtk-sys v2.0.2
+   Compiling pin-project-internal v1.1.13
+   Compiling vtable-macro v0.5.0
+   Compiling nom v8.0.0
+   Compiling tiny-xlib v0.2.5
+   Compiling x11 v2.21.0
+   Compiling iana-time-zone v0.1.65
+   Compiling ab_glyph_rasterizer v0.1.10
+   Compiling typenum v1.20.1
+   Compiling ab_glyph v0.2.32
+   Compiling chrono v0.4.45
+   Compiling tree_magic_mini v3.2.2
+   Compiling vtable v0.5.0
+   Compiling pin-project v1.1.13
+   Compiling parley v0.11.1
+   Compiling tiny-skia v0.11.4
+   Compiling tauri-winres v0.3.6
+   Compiling async-process v2.5.0
+   Compiling zbus_macros v5.19.0
+   Compiling clru v0.6.3
+   Compiling dirs v6.0.0
+   Compiling cargo_toml v0.22.3
+   Compiling blocking v1.7.0
+   Compiling async-executor v1.14.0
+   Compiling lyon_algorithms v1.0.22
+   Compiling winit v0.30.13
+   Compiling async-broadcast v0.7.2
+   Compiling taffy v0.10.1
+   Compiling i-slint-core-macros v1.18.1
+   Compiling gdkx11-sys v0.18.2
+   Compiling async-recursion v1.1.1
+   Compiling async-trait v0.1.92
+   Compiling ordered-stream v0.2.0
+   Compiling os_pipe v1.2.3
+   Compiling ctor v0.10.1
+   Compiling hex v0.4.3
+   Compiling pin-weak v1.1.0
+   Compiling sys-locale v0.3.2
+   Compiling i-slint-core v1.18.1
+   Compiling zbus v5.19.0
+   Compiling wl-clipboard-rs v0.9.5
+   Compiling tauri-build v2.6.3
+   Compiling sctk-adwaita v0.10.1
+   Compiling xkbcommon-dl v0.4.2
+   Compiling wayland-protocols-plasma v0.3.12
+   Compiling i-slint-backend-winit v1.18.1
+   Compiling tokio-macros v2.7.2
+   Compiling mio v1.2.3
+   Compiling socket2 v0.6.5
+   Compiling cookie v0.18.2
+   Compiling smol_str v0.2.2
+   Compiling openssl v0.10.81
+   Compiling foreign-types-shared v0.1.1
+   Compiling tokio v1.53.1
+   Compiling foreign-types v0.3.2
+   Compiling dbus v0.9.12
+   Compiling arboard v3.7.0
+   Compiling softbuffer v0.4.8
+   Compiling i-slint-renderer-software v1.18.1
+   Compiling javascriptcore-rs v1.1.2
+   Compiling soup3 v0.5.0
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling i-slint-backend-selector v1.18.1
+   Compiling webbrowser v1.2.5
+   Compiling crossbeam-channel v0.5.16
+   Compiling futures v0.3.34
+   Compiling openssl-macros v0.1.1
+   Compiling smartstring v1.0.1
+   Compiling scoped-tls-hkt v0.1.5
+   Compiling native-tls v0.2.18
+   Compiling imgref v1.12.3
+   Compiling webkit2gtk v2.0.2
+   Compiling digest v0.10.7
+   Compiling tauri v2.11.5
+   Compiling slint-build v1.18.1
+   Compiling png v0.17.16
+   Compiling dlopen2_derive v0.4.3
+   Compiling libloading v0.7.4
+   Compiling wry v0.55.1
+   Compiling unicode-width v0.1.14
+   Compiling openssl-probe v0.2.1
+   Compiling static_assertions v1.1.0
+   Compiling cpufeatures v0.2.17
+   Compiling tauri-runtime v2.11.3
+   Compiling sha2 v0.10.9
+   Compiling dlopen2 v0.8.2
+   Compiling textwrap v0.11.0
+   Compiling libappindicator-sys v0.9.0
+   Compiling ico v0.5.0
+   Compiling gdkx11 v0.18.2
+   Compiling keyboard-types v0.7.0
+   Compiling gdkwayland-sys v0.18.2
+   Compiling openrevo-core v0.9.8 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri/crates/openrevo-core)
+   Compiling rhai_codegen v3.2.0
+   Compiling atty v0.2.14
+   Compiling vec_map v0.8.2
+   Compiling ansi_term v0.12.1
+   Compiling tauri-runtime-wry v2.11.4
+   Compiling thin-vec v0.2.19
+   Compiling strsim v0.8.0
+   Compiling clap v2.34.0
+   Compiling rhai v1.26.1
+   Compiling muda v0.19.3
+   Compiling tao v0.35.3
+   Compiling tauri-codegen v2.6.3
+   Compiling libappindicator v0.9.0
+   Compiling ureq v2.12.1
+   Compiling slint-macros v1.18.1
+   Compiling tauri-plugin v2.6.3
+   Compiling serialize-to-javascript-impl v0.1.2
+   Compiling xml-rs v0.8.29
+   Compiling slint v1.18.1
+   Compiling dbus-codegen v0.9.1
+   Compiling serialize-to-javascript v0.1.2
+   Compiling tauri-plugin-autostart v2.5.1
+   Compiling tray-icon v0.24.2
+warning: unused import: `Instant`
+ --> crates/openrevo-core/src/driver/ble_cooler.rs:3:27
+  |
+3 | use std::time::{Duration, Instant};
+  |                           ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::process::Command`
+ --> crates/openrevo-core/src/system/takeover/lifecycle.rs:9:5
+  |
+9 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Instant`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:10:5
+   |
+10 | use std::time::Instant;
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `disable_scheduled_tasks`, `enable_scheduled_tasks`, `neutralize_run_keys`, `refresh_tray_notification_area`, `reg_key_exists`, `restore_run_keys`, `set_reg_dword`, `set_uwp_appmodel_startup_state`, and `update_uwp_startup_task`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:16:5
+   |
+16 |     disable_scheduled_tasks, enable_scheduled_tasks, neutralize_run_keys, refresh_tray_notification_area,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 |     reg_key_exists, restore_run_keys, set_reg_dword, set_uwp_appmodel_startup_state, update_uwp_startup_task,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ControlCenterLocation` and `find_official_control_center`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:19:22
+   |
+19 | use super::sniffer::{find_official_control_center, ControlCenterLocation};
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^
+
+   Compiling dirs-sys v0.3.7
+warning: unreachable expression
+   --> crates/openrevo-core/src/system/config.rs:669:5
+    |
+665 |           return crate::pal::xdg::config_dir();
+    |           ------------------------------------ any code following this expression is unreachable
+...
+669 | /     if let Ok(app_data) = std::env::var("APPDATA") {
+670 | |         PathBuf::from(app_data).join("OpenRevo")
+671 | |     } else {
+672 | |         PathBuf::from(".")
+673 | |     }
+    | |_____^ unreachable expression
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+   Compiling mime v0.3.17
+warning: variable does not need to be mutable
+    --> crates/openrevo-core/src/driver/gpu_bridge.rs:1284:9
+     |
+1284 |     let mut gpu_name = gpu.lock().get_name(0);
+     |         ----^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:136:24
+    |
+136 |     let mut last_err = String::from("no firmware variable readable");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+151 |         Ok(_) => last_err = format!("{OEM_MAGIC_VAR_NAME} is empty"),
+    |                  -------- `last_err` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:151:18
+    |
+151 |         Ok(_) => last_err = format!("{OEM_MAGIC_VAR_NAME} is empty"),
+    |                  ^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:152:19
+    |
+152 |         Err(e) => last_err = format!("{OEM_MAGIC_VAR_NAME}: {e}"),
+    |                   ^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+   Compiling dirs v4.0.0
+   Compiling ksni v0.2.2
+   Compiling openrevo-main v0.9.8 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri/crates/openrevo-main)
+warning: constant `BUILTIN_XINGYAO_14` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:11:7
+   |
+11 | const BUILTIN_XINGYAO_14: &str = include_str!("../../../../../resources/drivers/xingyao_14_p916f.json");
+   |       ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `BUILTIN_WUJIE_14_IP3` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:12:7
+   |
+12 | const BUILTIN_WUJIE_14_IP3: &str = include_str!("../../../../../resources/drivers/wujie_14_ip3.json");
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_WUJIE_14_BLD` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:13:7
+   |
+13 | const BUILTIN_WUJIE_14_BLD: &str = include_str!("../../../../../resources/drivers/wujie_14_bld.json");
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_WUJIE_X_SERIES` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:14:7
+   |
+14 | const BUILTIN_WUJIE_X_SERIES: &str = include_str!("../../../../../resources/drivers/wujie_x_series.json");
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_JIAOLONG_16_BLD` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:15:7
+   |
+15 | const BUILTIN_JIAOLONG_16_BLD: &str = include_str!("../../../../../resources/drivers/jiaolong_16_bld.json");
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RPC_C_AUTHZ_NONE` is never used
+  --> crates/openrevo-core/src/hal/declarative/wmi_mailbox.rs:37:7
+   |
+37 | const RPC_C_AUTHZ_NONE: u32 = 0;
+   |       ^^^^^^^^^^^^^^^^
+
+warning: struct `LUID` is never constructed
+  --> crates/openrevo-core/src/driver/uefi_nvram.rs:86:8
+   |
+86 | struct LUID {
+   |        ^^^^
+
+warning: struct `TOKEN_PRIVILEGES` is never constructed
+  --> crates/openrevo-core/src/driver/uefi_nvram.rs:92:8
+   |
+92 | struct TOKEN_PRIVILEGES {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: function `wide` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:496:8
+    |
+496 |     fn wide(_p: *const u16) -> usize {
+    |        ^^^^
+
+warning: function `CreateServiceW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:519:19
+    |
+519 |     pub unsafe fn CreateServiceW(
+    |                   ^^^^^^^^^^^^^^
+
+warning: function `ChangeServiceConfigW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:538:19
+    |
+538 |     pub unsafe fn ChangeServiceConfigW(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `StartServiceW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:555:19
+    |
+555 |     pub unsafe fn StartServiceW(
+    |                   ^^^^^^^^^^^^^
+
+warning: function `GetLastError` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:583:19
+    |
+583 |     pub unsafe fn GetLastError() -> u32 {
+    |                   ^^^^^^^^^^^^
+
+warning: constant `MB_BFLG` is never used
+   --> crates/openrevo-core/src/pal/ec.rs:240:11
+    |
+240 |     const MB_BFLG: u8 = 1 << 2;
+    |           ^^^^^^^
+
+warning: function `run_powercfg` is never used
+  --> crates/openrevo-core/src/system/power/ppm.rs:35:4
+   |
+35 | fn run_powercfg(_args: &[&str]) -> Result<std::process::Output, String> {
+   |    ^^^^^^^^^^^^
+
+warning: function `probe_dir_for_candidates` is never used
+   --> crates/openrevo-core/src/system/takeover/sniffer.rs:121:4
+    |
+121 | fn probe_dir_for_candidates(dir: &Path) -> Option<PathBuf> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `OpenSCManagerW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:501:19
+    |
+501 |     pub unsafe fn OpenSCManagerW(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `open_scmanager_w`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variable `lpMachineName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:502:9
+    |
+502 |         lpMachineName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_machine_name`
+
+warning: variable `lpDatabaseName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:503:9
+    |
+503 |         lpDatabaseName: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_database_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:504:9
+    |
+504 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: function `OpenServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:510:19
+    |
+510 |     pub unsafe fn OpenServiceW(
+    |                   ^^^^^^^^^^^^ help: convert the identifier to snake case: `open_service_w`
+
+warning: variable `hSCManager` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:511:9
+    |
+511 |         hSCManager: isize,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `h_scmanager`
+
+warning: variable `lpServiceName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:512:9
+    |
+512 |         lpServiceName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:513:9
+    |
+513 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: function `CreateServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:519:19
+    |
+519 |     pub unsafe fn CreateServiceW(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `create_service_w`
+
+warning: variable `hSCManager` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:520:9
+    |
+520 |         hSCManager: isize,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `h_scmanager`
+
+warning: variable `lpServiceName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:521:9
+    |
+521 |         lpServiceName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_name`
+
+warning: variable `lpDisplayName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:522:9
+    |
+522 |         lpDisplayName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_display_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:523:9
+    |
+523 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: variable `dwServiceType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:524:9
+    |
+524 |         dwServiceType: u32,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_service_type`
+
+warning: variable `dwStartType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:525:9
+    |
+525 |         dwStartType: u32,
+    |         ^^^^^^^^^^^ help: convert the identifier to snake case: `dw_start_type`
+
+warning: variable `dwErrorControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:526:9
+    |
+526 |         dwErrorControl: u32,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_error_control`
+
+warning: variable `lpBinaryPathName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:527:9
+    |
+527 |         lpBinaryPathName: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_binary_path_name`
+
+warning: variable `lpLoadOrderGroup` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:528:9
+    |
+528 |         lpLoadOrderGroup: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_load_order_group`
+
+warning: variable `lpdwTagId` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:529:9
+    |
+529 |         lpdwTagId: *mut u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `lpdw_tag_id`
+
+warning: variable `lpDependencies` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:530:9
+    |
+530 |         lpDependencies: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_dependencies`
+
+warning: variable `lpServiceStartName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:531:9
+    |
+531 |         lpServiceStartName: *const u16,
+    |         ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_start_name`
+
+warning: variable `lpPassword` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:532:9
+    |
+532 |         lpPassword: *const u16,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `lp_password`
+
+warning: function `ChangeServiceConfigW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:538:19
+    |
+538 |     pub unsafe fn ChangeServiceConfigW(
+    |                   ^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `change_service_config_w`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:539:9
+    |
+539 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwServiceType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:540:9
+    |
+540 |         dwServiceType: u32,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_service_type`
+
+warning: variable `dwStartType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:541:9
+    |
+541 |         dwStartType: u32,
+    |         ^^^^^^^^^^^ help: convert the identifier to snake case: `dw_start_type`
+
+warning: variable `dwErrorControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:542:9
+    |
+542 |         dwErrorControl: u32,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_error_control`
+
+warning: variable `lpBinaryPathName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:543:9
+    |
+543 |         lpBinaryPathName: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_binary_path_name`
+
+warning: variable `lpLoadOrderGroup` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:544:9
+    |
+544 |         lpLoadOrderGroup: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_load_order_group`
+
+warning: variable `lpdwTagId` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:545:9
+    |
+545 |         lpdwTagId: *mut u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `lpdw_tag_id`
+
+warning: variable `lpDependencies` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:546:9
+    |
+546 |         lpDependencies: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_dependencies`
+
+warning: variable `lpServiceStartName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:547:9
+    |
+547 |         lpServiceStartName: *const u16,
+    |         ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_start_name`
+
+warning: variable `lpPassword` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:548:9
+    |
+548 |         lpPassword: *const u16,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `lp_password`
+
+warning: variable `lpDisplayName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:549:9
+    |
+549 |         lpDisplayName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_display_name`
+
+warning: function `StartServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:555:19
+    |
+555 |     pub unsafe fn StartServiceW(
+    |                   ^^^^^^^^^^^^^ help: convert the identifier to snake case: `start_service_w`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:556:9
+    |
+556 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwNumServiceArgs` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:557:9
+    |
+557 |         dwNumServiceArgs: u32,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_num_service_args`
+
+warning: variable `lpServiceArgVectors` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:558:9
+    |
+558 |         lpServiceArgVectors: *const *const u16,
+    |         ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_arg_vectors`
+
+warning: function `ControlService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:564:19
+    |
+564 |     pub unsafe fn ControlService(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `control_service`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:565:9
+    |
+565 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:566:9
+    |
+566 |         dwControl: u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `dw_control`
+
+warning: variable `lpServiceStatus` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:567:9
+    |
+567 |         lpServiceStatus: *mut u8,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_status`
+
+warning: function `DeleteService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:573:19
+    |
+573 |     pub unsafe fn DeleteService(hService: isize) -> i32 {
+    |                   ^^^^^^^^^^^^^ help: convert the identifier to snake case: `delete_service`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:573:33
+    |
+573 |     pub unsafe fn DeleteService(hService: isize) -> i32 {
+    |                                 ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: function `CloseServiceHandle` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:578:19
+    |
+578 |     pub unsafe fn CloseServiceHandle(hSCObject: isize) -> i32 {
+    |                   ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `close_service_handle`
+
+warning: variable `hSCObject` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:578:38
+    |
+578 |     pub unsafe fn CloseServiceHandle(hSCObject: isize) -> i32 {
+    |                                      ^^^^^^^^^ help: convert the identifier to snake case: `h_scobject`
+
+warning: function `GetLastError` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:583:19
+    |
+583 |     pub unsafe fn GetLastError() -> u32 {
+    |                   ^^^^^^^^^^^^ help: convert the identifier to snake case: `get_last_error`
+
+   Compiling openrevo-osd v0.1.0 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri/crates/openrevo-osd)
+   Compiling tauri-macros v2.6.3
+   Compiling slint-interpreter v1.18.1
+   Compiling auto-launch v0.5.0
+   Compiling dbus-tree v0.9.2
+   Compiling open-revo v0.9.8 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri)
+warning: `openrevo-core` (lib) generated 73 warnings (run `cargo fix --lib -p openrevo-core` to apply 6 suggestions)
+   Compiling tauri-plugin-single-instance v2.4.4
+   Compiling openrevo-widget v0.1.0 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri/crates/openrevo-widget)
+warning: unused variable: `raw`
+   --> crates/openrevo-widget/src/lib.rs:143:33
+    |
+143 |                     if let Some(raw) = hwnd_raw {
+    |                                 ^^^ help: if this is intentional, prefix it with an underscore: `_raw`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `always_on_top`
+   --> crates/openrevo-widget/src/lib.rs:295:10
+    |
+295 |     let (always_on_top, decorations, transparent, skip_taskbar, manifest_click_through) = if let Ok(content) = std::fs::read_to_str...
+    |          ^^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_always_on_top`
+
+warning: unused variable: `decorations`
+   --> crates/openrevo-widget/src/lib.rs:295:25
+    |
+295 |     let (always_on_top, decorations, transparent, skip_taskbar, manifest_click_through) = if let Ok(content) = std::fs::read_to_str...
+    |                         ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_decorations`
+
+warning: unused variable: `transparent`
+   --> crates/openrevo-widget/src/lib.rs:295:38
+    |
+295 |     let (always_on_top, decorations, transparent, skip_taskbar, manifest_click_through) = if let Ok(content) = std::fs::read_to_str...
+    |                                      ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_transparent`
+
+warning: unused variable: `skip_taskbar`
+   --> crates/openrevo-widget/src/lib.rs:295:51
+    |
+295 | ...tions, transparent, skip_taskbar, manifest_click_through) = if let Ok(content) = std::fs::read_to_string(&manifest_path) {
+    |                        ^^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_skip_taskbar`
+
+warning: variable does not need to be mutable
+   --> crates/openrevo-widget/src/lib.rs:531:17
+    |
+531 |             let mut done = applied_clone.lock().unwrap();
+    |                 ----^^^^
+    |                 |
+    |                 help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `parent_raw`
+   --> crates/openrevo-widget/src/lib.rs:525:9
+    |
+525 |     let parent_raw = parent_hwnd_raw;
+    |         ^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_parent_raw`
+
+warning: `openrevo-widget` (lib) generated 7 warnings (run `cargo fix --lib -p openrevo-widget` to apply 7 suggestions)
+warning: unused import: `std::sync::OnceLock`
+ --> src/system/display_tuning.rs:7:5
+  |
+7 | use std::sync::OnceLock;
+  |     ^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+   --> src/system/widget_manager.rs:139:9
+    |
+139 |     let mut builder = WebviewWindowBuilder::new(app, &label, target_url)
+    |         ----^^^^^^^
+    |         |
+    |         help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `path`
+   --> src/commands/system_cmd.rs:572:23
+    |
+572 |     let get_reg_sz = |path: &str, key: &str| -> Option<String> {
+    |                       ^^^^ help: if this is intentional, prefix it with an underscore: `_path`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `key`
+   --> src/commands/system_cmd.rs:572:35
+    |
+572 |     let get_reg_sz = |path: &str, key: &str| -> Option<String> {
+    |                                   ^^^ help: if this is intentional, prefix it with an underscore: `_key`
+
+warning: unused variable: `dir`
+   --> src/commands/system_cmd.rs:760:9
+    |
+760 |     let dir = crate::system::config::get_config_dir();
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_dir`
+
+warning: unused variable: `dir`
+   --> src/commands/tuning_cmd.rs:750:9
+    |
+750 |     let dir = crate::system::config::get_profiles_dir();
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_dir`
+
+warning: unused variable: `text`
+  --> src/commands/market_cmd.rs:70:24
+   |
+70 | pub fn write_clipboard(text: String) -> Result<bool, String> {
+   |                        ^^^^ help: if this is intentional, prefix it with an underscore: `_text`
+
+warning: unused variable: `url`
+   --> src/commands/market_cmd.rs:347:25
+    |
+347 | fn download_file_native(url: &str, dest: &Path) -> Result<(), String> {
+    |                         ^^^ help: if this is intentional, prefix it with an underscore: `_url`
+
+warning: unused variable: `dest`
+   --> src/commands/market_cmd.rs:347:36
+    |
+347 | fn download_file_native(url: &str, dest: &Path) -> Result<(), String> {
+    |                                    ^^^^ help: if this is intentional, prefix it with an underscore: `_dest`
+
+warning: unused variable: `archive`
+   --> src/commands/market_cmd.rs:390:26
+    |
+390 | fn unpack_archive_native(archive: &Path, dest: &Path) -> Result<(), String> {
+    |                          ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_archive`
+
+warning: unused variable: `dest`
+   --> src/commands/market_cmd.rs:390:42
+    |
+390 | fn unpack_archive_native(archive: &Path, dest: &Path) -> Result<(), String> {
+    |                                          ^^^^ help: if this is intentional, prefix it with an underscore: `_dest`
+
+warning: unused variable: `path`
+   --> src/commands/market_cmd.rs:433:19
+    |
+433 | fn compute_sha256(path: &Path) -> Result<String, String> {
+    |                   ^^^^ help: if this is intentional, prefix it with an underscore: `_path`
+
+warning: unused variable: `cfg`
+   --> src/system/osd_window.rs:162:9
+    |
+162 |     let cfg = crate::system::config::load_config();
+    |         ^^^ help: if this is intentional, prefix it with an underscore: `_cfg`
+
+warning: unused variable: `win`
+   --> src/system/osd_window.rs:309:21
+    |
+309 |         if let Some(win) = app.get_webview_window("osd") {
+    |                     ^^^ help: if this is intentional, prefix it with an underscore: `_win`
+
+warning: unused variable: `show_res`
+   --> src/system/window.rs:230:9
+    |
+230 |     let show_res = window.show();
+    |         ^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_show_res`
+
+warning: unused variable: `unmin_res`
+   --> src/system/window.rs:231:9
+    |
+231 |     let unmin_res = window.unminimize();
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_unmin_res`
+
+warning: unused variable: `top_res`
+   --> src/system/window.rs:232:9
+    |
+232 |     let top_res = window.set_always_on_top(true);
+    |         ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_top_res`
+
+warning: unused variable: `focus_res`
+   --> src/system/window.rs:233:9
+    |
+233 |     let focus_res = window.set_focus();
+    |         ^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_focus_res`
+
+warning: unused variable: `window`
+   --> src/system/window.rs:423:27
+    |
+423 | fn suppress_native_border(window: &WebviewWindow) {
+    |                           ^^^^^^ help: if this is intentional, prefix it with an underscore: `_window`
+
+warning: unused variable: `pid`
+  --> src/system/plugin_service.rs:73:24
+   |
+73 | fn kill_process_by_pid(pid: u32) -> bool {
+   |                        ^^^ help: if this is intentional, prefix it with an underscore: `_pid`
+
+warning: unused variable: `vk`
+   --> src/system/shortcuts/dispatcher.rs:260:23
+    |
+260 | fn simulate_win32_key(vk: u8) {
+    |                       ^^ help: if this is intentional, prefix it with an underscore: `_vk`
+
+warning: unused variable: `win`
+   --> src/system/native_wry/mod.rs:758:34
+    |
+758 |                     if let Some((win, view)) = popouts.get(&plugin_id) {
+    |                                  ^^^ help: if this is intentional, prefix it with an underscore: `_win`
+
+warning: unused variable: `win`
+   --> src/system/native_wry/mod.rs:778:32
+    |
+778 |                     for (pid, (win, view)) in popouts.iter() {
+    |                                ^^^ help: if this is intentional, prefix it with an underscore: `_win`
+
+warning: unused variable: `parent_hwnd`
+   --> src/system/native_wry/mod.rs:860:45
+    |
+860 |                     if let Some((pid, view, parent_hwnd)) = embedded.take() {
+    |                                             ^^^^^^^^^^^ help: if this is intentional, prefix it with an underscore: `_parent_hwnd`
+
+warning: variable `skip_taskbar` is assigned to, but never used
+   --> src/system/native_wry/mod.rs:944:9
+    |
+944 |     let mut skip_taskbar = false;
+    |         ^^^^^^^^^^^^^^^^
+    |
+    = note: consider using `_skip_taskbar` instead
+
+warning: value assigned to `skip_taskbar` is never read
+   --> src/system/native_wry/mod.rs:974:21
+    |
+974 |                     skip_taskbar = true;
+    |                     ^^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+984 |                     skip_taskbar = win_cfg.skip_taskbar;
+    |                     ----------------------------------- `skip_taskbar` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `skip_taskbar` is never read
+   --> src/system/native_wry/mod.rs:984:21
+    |
+984 |                     skip_taskbar = win_cfg.skip_taskbar;
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: unused variable: `pid`
+   --> src/lib.rs:197:23
+    |
+197 |             if let Ok(pid) = pid_str.parse::<u32>() {
+    |                       ^^^ help: if this is intentional, prefix it with an underscore: `_pid`
+
+warning: constant `LOGIND_SERVICE` is never used
+  --> src/system/power_events/logind.rs:19:7
+   |
+19 | const LOGIND_SERVICE: &str = "org.freedesktop.login1";
+   |       ^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `LOGIND_PATH` is never used
+  --> src/system/power_events/logind.rs:20:7
+   |
+20 | const LOGIND_PATH: &str = "/org/freedesktop/login1";
+   |       ^^^^^^^^^^^
+
+warning: constant `PORTABLE_UPDATE_SCRIPT` is never used
+  --> src/updater/installer.rs:12:7
+   |
+12 | const PORTABLE_UPDATE_SCRIPT: &str = r#"
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: `open-revo` (lib) generated 31 warnings (run `cargo fix --lib -p open-revo` to apply 25 suggestions)
+    Finished `release` profile [optimized] target(s) in 18m 21s
++ cargo build --locked --release -p openrevo-core --bin openrevo-ec-helper
+   Compiling proc-macro2 v1.0.107
+   Compiling stable_deref_trait v1.2.1
+   Compiling cfg-if v1.0.4
+   Compiling libc v0.2.189
+   Compiling litemap v0.8.3
+   Compiling writeable v0.6.4
+   Compiling smallvec v1.16.5
+   Compiling serde_json v1.0.151
+   Compiling utf8_iter v1.0.4
+   Compiling portable-atomic v1.15.0
+   Compiling quote v1.0.47
+   Compiling syn v2.0.119
+   Compiling syn v3.0.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling icu_properties_data v2.3.0
+   Compiling serde_core v1.0.229
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling getrandom v0.2.17
+   Compiling once_cell v1.21.4
+   Compiling bitflags v2.13.1
+   Compiling foreign-types-shared v0.1.1
+   Compiling foreign-types v0.3.2
+   Compiling const-random-macro v0.1.16
+   Compiling synstructure v0.13.2
+   Compiling openssl-sys v0.9.117
+   Compiling num-traits v0.2.19
+   Compiling ahash v0.8.12
+   Compiling percent-encoding v2.3.2
+   Compiling serde v1.0.229
+   Compiling memchr v2.8.3
+   Compiling form_urlencoded v1.2.2
+   Compiling zmij v1.0.23
+   Compiling const-random v0.1.18
+   Compiling getrandom v0.3.4
+   Compiling zerocopy v0.8.57
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling scopeguard v1.2.0
+   Compiling log v0.4.34
+   Compiling static_assertions v1.1.0
+   Compiling openssl-probe v0.2.1
+   Compiling itoa v1.0.18
+   Compiling smartstring v1.0.1
+   Compiling lock_api v0.4.14
+   Compiling digest v0.10.7
+   Compiling parking_lot_core v0.9.12
+   Compiling openrevo-core v0.9.8 (/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/src-tauri/crates/openrevo-core)
+   Compiling thin-vec v0.2.19
+   Compiling cpufeatures v0.2.17
+   Compiling pin-project-lite v0.2.17
+   Compiling base64 v0.22.1
+   Compiling sha2 v0.10.9
+   Compiling parking_lot v0.12.5
+   Compiling libloading v0.8.9
+   Compiling semver v1.0.28
+   Compiling zerovec-derive v0.11.6
+   Compiling displaydoc v0.2.7
+   Compiling serde_derive v1.0.229
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling openssl-macros v0.1.1
+   Compiling openssl v0.10.81
+   Compiling zerofrom v0.1.8
+   Compiling native-tls v0.2.18
+   Compiling rhai_codegen v3.2.0
+   Compiling tokio-macros v2.7.2
+   Compiling yoke v0.8.3
+   Compiling zerovec v0.11.8
+   Compiling tinystr v0.8.4
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.6
+   Compiling zerotrie v0.2.5
+   Compiling icu_collections v2.3.0
+   Compiling icu_provider v2.3.1
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling tokio v1.53.1
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling ureq v2.12.1
+   Compiling rhai v1.26.1
+warning: unused import: `Instant`
+ --> crates/openrevo-core/src/driver/ble_cooler.rs:3:27
+  |
+3 | use std::time::{Duration, Instant};
+  |                           ^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `std::process::Command`
+ --> crates/openrevo-core/src/system/takeover/lifecycle.rs:9:5
+  |
+9 | use std::process::Command;
+  |     ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused import: `std::time::Instant`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:10:5
+   |
+10 | use std::time::Instant;
+   |     ^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `disable_scheduled_tasks`, `enable_scheduled_tasks`, `neutralize_run_keys`, `refresh_tray_notification_area`, `reg_key_exists`, `restore_run_keys`, `set_reg_dword`, `set_uwp_appmodel_startup_state`, and `update_uwp_startup_task`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:16:5
+   |
+16 |     disable_scheduled_tasks, enable_scheduled_tasks, neutralize_run_keys, refresh_tray_notification_area,
+   |     ^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+17 |     reg_key_exists, restore_run_keys, set_reg_dword, set_uwp_appmodel_startup_state, update_uwp_startup_task,
+   |     ^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: unused imports: `ControlCenterLocation` and `find_official_control_center`
+  --> crates/openrevo-core/src/system/takeover/lifecycle.rs:19:22
+   |
+19 | use super::sniffer::{find_official_control_center, ControlCenterLocation};
+   |                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^
+
+warning: unreachable expression
+   --> crates/openrevo-core/src/system/config.rs:669:5
+    |
+665 |           return crate::pal::xdg::config_dir();
+    |           ------------------------------------ any code following this expression is unreachable
+...
+669 | /     if let Ok(app_data) = std::env::var("APPDATA") {
+670 | |         PathBuf::from(app_data).join("OpenRevo")
+671 | |     } else {
+672 | |         PathBuf::from(".")
+673 | |     }
+    | |_____^ unreachable expression
+    |
+    = note: `#[warn(unreachable_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> crates/openrevo-core/src/driver/gpu_bridge.rs:1284:9
+     |
+1284 |     let mut gpu_name = gpu.lock().get_name(0);
+     |         ----^^^^^^^^
+     |         |
+     |         help: remove this `mut`
+     |
+     = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:136:24
+    |
+136 |     let mut last_err = String::from("no firmware variable readable");
+    |                        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+151 |         Ok(_) => last_err = format!("{OEM_MAGIC_VAR_NAME} is empty"),
+    |                  -------- `last_err` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:151:18
+    |
+151 |         Ok(_) => last_err = format!("{OEM_MAGIC_VAR_NAME} is empty"),
+    |                  ^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: value assigned to `last_err` is never read
+   --> crates/openrevo-core/src/driver/uefi_nvram.rs:152:19
+    |
+152 |         Err(e) => last_err = format!("{OEM_MAGIC_VAR_NAME}: {e}"),
+    |                   ^^^^^^^^
+    |
+    = help: maybe it is overwritten before being read?
+
+warning: constant `BUILTIN_XINGYAO_14` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:11:7
+   |
+11 | const BUILTIN_XINGYAO_14: &str = include_str!("../../../../../resources/drivers/xingyao_14_p916f.json");
+   |       ^^^^^^^^^^^^^^^^^^
+   |
+   = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: constant `BUILTIN_WUJIE_14_IP3` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:12:7
+   |
+12 | const BUILTIN_WUJIE_14_IP3: &str = include_str!("../../../../../resources/drivers/wujie_14_ip3.json");
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_WUJIE_14_BLD` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:13:7
+   |
+13 | const BUILTIN_WUJIE_14_BLD: &str = include_str!("../../../../../resources/drivers/wujie_14_bld.json");
+   |       ^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_WUJIE_X_SERIES` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:14:7
+   |
+14 | const BUILTIN_WUJIE_X_SERIES: &str = include_str!("../../../../../resources/drivers/wujie_x_series.json");
+   |       ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `BUILTIN_JIAOLONG_16_BLD` is never used
+  --> crates/openrevo-core/src/hal/declarative/mod.rs:15:7
+   |
+15 | const BUILTIN_JIAOLONG_16_BLD: &str = include_str!("../../../../../resources/drivers/jiaolong_16_bld.json");
+   |       ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: constant `RPC_C_AUTHZ_NONE` is never used
+  --> crates/openrevo-core/src/hal/declarative/wmi_mailbox.rs:37:7
+   |
+37 | const RPC_C_AUTHZ_NONE: u32 = 0;
+   |       ^^^^^^^^^^^^^^^^
+
+warning: struct `LUID` is never constructed
+  --> crates/openrevo-core/src/driver/uefi_nvram.rs:86:8
+   |
+86 | struct LUID {
+   |        ^^^^
+
+warning: struct `TOKEN_PRIVILEGES` is never constructed
+  --> crates/openrevo-core/src/driver/uefi_nvram.rs:92:8
+   |
+92 | struct TOKEN_PRIVILEGES {
+   |        ^^^^^^^^^^^^^^^^
+
+warning: function `wide` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:496:8
+    |
+496 |     fn wide(_p: *const u16) -> usize {
+    |        ^^^^
+
+warning: function `CreateServiceW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:519:19
+    |
+519 |     pub unsafe fn CreateServiceW(
+    |                   ^^^^^^^^^^^^^^
+
+warning: function `ChangeServiceConfigW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:538:19
+    |
+538 |     pub unsafe fn ChangeServiceConfigW(
+    |                   ^^^^^^^^^^^^^^^^^^^^
+
+warning: function `StartServiceW` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:555:19
+    |
+555 |     pub unsafe fn StartServiceW(
+    |                   ^^^^^^^^^^^^^
+
+warning: function `GetLastError` is never used
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:583:19
+    |
+583 |     pub unsafe fn GetLastError() -> u32 {
+    |                   ^^^^^^^^^^^^
+
+warning: constant `MB_BFLG` is never used
+   --> crates/openrevo-core/src/pal/ec.rs:240:11
+    |
+240 |     const MB_BFLG: u8 = 1 << 2;
+    |           ^^^^^^^
+
+warning: function `run_powercfg` is never used
+  --> crates/openrevo-core/src/system/power/ppm.rs:35:4
+   |
+35 | fn run_powercfg(_args: &[&str]) -> Result<std::process::Output, String> {
+   |    ^^^^^^^^^^^^
+
+warning: function `probe_dir_for_candidates` is never used
+   --> crates/openrevo-core/src/system/takeover/sniffer.rs:121:4
+    |
+121 | fn probe_dir_for_candidates(dir: &Path) -> Option<PathBuf> {
+    |    ^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `OpenSCManagerW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:501:19
+    |
+501 |     pub unsafe fn OpenSCManagerW(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `open_scmanager_w`
+    |
+    = note: `#[warn(non_snake_case)]` (part of `#[warn(nonstandard_style)]`) on by default
+
+warning: variable `lpMachineName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:502:9
+    |
+502 |         lpMachineName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_machine_name`
+
+warning: variable `lpDatabaseName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:503:9
+    |
+503 |         lpDatabaseName: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_database_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:504:9
+    |
+504 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: function `OpenServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:510:19
+    |
+510 |     pub unsafe fn OpenServiceW(
+    |                   ^^^^^^^^^^^^ help: convert the identifier to snake case: `open_service_w`
+
+warning: variable `hSCManager` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:511:9
+    |
+511 |         hSCManager: isize,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `h_scmanager`
+
+warning: variable `lpServiceName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:512:9
+    |
+512 |         lpServiceName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:513:9
+    |
+513 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: function `CreateServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:519:19
+    |
+519 |     pub unsafe fn CreateServiceW(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `create_service_w`
+
+warning: variable `hSCManager` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:520:9
+    |
+520 |         hSCManager: isize,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `h_scmanager`
+
+warning: variable `lpServiceName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:521:9
+    |
+521 |         lpServiceName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_name`
+
+warning: variable `lpDisplayName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:522:9
+    |
+522 |         lpDisplayName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_display_name`
+
+warning: variable `dwDesiredAccess` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:523:9
+    |
+523 |         dwDesiredAccess: u32,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_desired_access`
+
+warning: variable `dwServiceType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:524:9
+    |
+524 |         dwServiceType: u32,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_service_type`
+
+warning: variable `dwStartType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:525:9
+    |
+525 |         dwStartType: u32,
+    |         ^^^^^^^^^^^ help: convert the identifier to snake case: `dw_start_type`
+
+warning: variable `dwErrorControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:526:9
+    |
+526 |         dwErrorControl: u32,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_error_control`
+
+warning: variable `lpBinaryPathName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:527:9
+    |
+527 |         lpBinaryPathName: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_binary_path_name`
+
+warning: variable `lpLoadOrderGroup` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:528:9
+    |
+528 |         lpLoadOrderGroup: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_load_order_group`
+
+warning: variable `lpdwTagId` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:529:9
+    |
+529 |         lpdwTagId: *mut u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `lpdw_tag_id`
+
+warning: variable `lpDependencies` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:530:9
+    |
+530 |         lpDependencies: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_dependencies`
+
+warning: variable `lpServiceStartName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:531:9
+    |
+531 |         lpServiceStartName: *const u16,
+    |         ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_start_name`
+
+warning: variable `lpPassword` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:532:9
+    |
+532 |         lpPassword: *const u16,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `lp_password`
+
+warning: function `ChangeServiceConfigW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:538:19
+    |
+538 |     pub unsafe fn ChangeServiceConfigW(
+    |                   ^^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `change_service_config_w`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:539:9
+    |
+539 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwServiceType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:540:9
+    |
+540 |         dwServiceType: u32,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_service_type`
+
+warning: variable `dwStartType` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:541:9
+    |
+541 |         dwStartType: u32,
+    |         ^^^^^^^^^^^ help: convert the identifier to snake case: `dw_start_type`
+
+warning: variable `dwErrorControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:542:9
+    |
+542 |         dwErrorControl: u32,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_error_control`
+
+warning: variable `lpBinaryPathName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:543:9
+    |
+543 |         lpBinaryPathName: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_binary_path_name`
+
+warning: variable `lpLoadOrderGroup` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:544:9
+    |
+544 |         lpLoadOrderGroup: *const u16,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_load_order_group`
+
+warning: variable `lpdwTagId` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:545:9
+    |
+545 |         lpdwTagId: *mut u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `lpdw_tag_id`
+
+warning: variable `lpDependencies` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:546:9
+    |
+546 |         lpDependencies: *const u16,
+    |         ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_dependencies`
+
+warning: variable `lpServiceStartName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:547:9
+    |
+547 |         lpServiceStartName: *const u16,
+    |         ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_start_name`
+
+warning: variable `lpPassword` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:548:9
+    |
+548 |         lpPassword: *const u16,
+    |         ^^^^^^^^^^ help: convert the identifier to snake case: `lp_password`
+
+warning: variable `lpDisplayName` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:549:9
+    |
+549 |         lpDisplayName: *const u16,
+    |         ^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_display_name`
+
+warning: function `StartServiceW` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:555:19
+    |
+555 |     pub unsafe fn StartServiceW(
+    |                   ^^^^^^^^^^^^^ help: convert the identifier to snake case: `start_service_w`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:556:9
+    |
+556 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwNumServiceArgs` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:557:9
+    |
+557 |         dwNumServiceArgs: u32,
+    |         ^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `dw_num_service_args`
+
+warning: variable `lpServiceArgVectors` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:558:9
+    |
+558 |         lpServiceArgVectors: *const *const u16,
+    |         ^^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_arg_vectors`
+
+warning: function `ControlService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:564:19
+    |
+564 |     pub unsafe fn ControlService(
+    |                   ^^^^^^^^^^^^^^ help: convert the identifier to snake case: `control_service`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:565:9
+    |
+565 |         hService: isize,
+    |         ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: variable `dwControl` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:566:9
+    |
+566 |         dwControl: u32,
+    |         ^^^^^^^^^ help: convert the identifier to snake case: `dw_control`
+
+warning: variable `lpServiceStatus` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:567:9
+    |
+567 |         lpServiceStatus: *mut u8,
+    |         ^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `lp_service_status`
+
+warning: function `DeleteService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:573:19
+    |
+573 |     pub unsafe fn DeleteService(hService: isize) -> i32 {
+    |                   ^^^^^^^^^^^^^ help: convert the identifier to snake case: `delete_service`
+
+warning: variable `hService` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:573:33
+    |
+573 |     pub unsafe fn DeleteService(hService: isize) -> i32 {
+    |                                 ^^^^^^^^ help: convert the identifier to snake case: `h_service`
+
+warning: function `CloseServiceHandle` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:578:19
+    |
+578 |     pub unsafe fn CloseServiceHandle(hSCObject: isize) -> i32 {
+    |                   ^^^^^^^^^^^^^^^^^^ help: convert the identifier to snake case: `close_service_handle`
+
+warning: variable `hSCObject` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:578:38
+    |
+578 |     pub unsafe fn CloseServiceHandle(hSCObject: isize) -> i32 {
+    |                                      ^^^^^^^^^ help: convert the identifier to snake case: `h_scobject`
+
+warning: function `GetLastError` should have a snake case name
+   --> crates/openrevo-core/src/driver/bld_driver_mgr.rs:583:19
+    |
+583 |     pub unsafe fn GetLastError() -> u32 {
+    |                   ^^^^^^^^^^^^ help: convert the identifier to snake case: `get_last_error`
+
+warning: `openrevo-core` (lib) generated 73 warnings (run `cargo fix --lib -p openrevo-core` to apply 6 suggestions)
+    Finished `release` profile [optimized] target(s) in 1m 00s
++ RPM_EC=0
+++ jobs -p
++ exit 0
+Executing(%install): /bin/sh -e /var/tmp/rpm-tmp.IHuMUy
++ umask 022
++ cd /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ '[' /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT '!=' / ']'
++ rm -rf /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT
+++ dirname /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT
++ mkdir -p /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build
++ mkdir /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT
++ CFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CFLAGS
++ CXXFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Werror=format-security -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer '
++ export CXXFLAGS
++ FFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FFLAGS
++ FCFLAGS='-O2 -flto=auto -ffat-lto-objects -fexceptions -g -grecord-gcc-switches -pipe -Wall -Wp,-U_FORTIFY_SOURCE,-D_FORTIFY_SOURCE=3 -Wp,-D_GLIBCXX_ASSERTIONS -specs=/usr/lib/rpm/redhat/redhat-hardened-cc1 -fstack-protector-strong -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -m64 -march=x86-64 -mtune=generic -fasynchronous-unwind-tables -fstack-clash-protection -fcf-protection -mtls-dialect=gnu2 -fno-omit-frame-pointer -mno-omit-leaf-frame-pointer -I/usr/lib64/gfortran/modules '
++ export FCFLAGS
++ VALAFLAGS=-g
++ export VALAFLAGS
++ RUSTFLAGS='-Copt-level=3 -Cdebuginfo=2 -Ccodegen-units=1 -Cstrip=none -Cforce-frame-pointers=yes -Clink-arg=-specs=/usr/lib/rpm/redhat/redhat-package-notes --cap-lints=warn'
++ export RUSTFLAGS
++ LDFLAGS='-Wl,-z,relro -Wl,--as-needed  -Wl,-z,pack-relative-relocs -Wl,-z,now -specs=/usr/lib/rpm/redhat/redhat-hardened-ld -specs=/usr/lib/rpm/redhat/redhat-annobin-cc1  -Wl,--build-id=sha1 -specs=/usr/lib/rpm/redhat/redhat-package-notes '
++ export LDFLAGS
++ LT_SYS_LIBRARY_PATH=/usr/lib64:
++ export LT_SYS_LIBRARY_PATH
++ CC=gcc
++ export CC
++ CXX=g++
++ export CXX
++ cd openrevo-0.9.8
++ TARGET=/__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target
++ install -Dm755 /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/openrevo-0.9.8/target/release/open-revo /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/bin/open-revo
++ install -Dm644 packaging/linux/openrevo.desktop /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/share/applications/open-revo.desktop
++ for size in 32 64 128
++ install -Dm644 src-tauri/icons/32x32.png /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/share/icons/hicolor/32x32/apps/open-revo.png
++ for size in 32 64 128
++ install -Dm644 src-tauri/icons/64x64.png /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/share/icons/hicolor/64x64/apps/open-revo.png
++ for size in 32 64 128
++ install -Dm644 src-tauri/icons/128x128.png /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/share/icons/hicolor/128x128/apps/open-revo.png
++ install -Dm644 src-tauri/icons/128x128@2x.png /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/share/icons/hicolor/256x256/apps/open-revo.png
++ install -Dm644 packaging/linux/60-openrevo.rules /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/lib/udev/rules.d/60-openrevo.rules
++ install -Dm644 packaging/linux/modprobe-openrevo.conf /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/etc/modprobe.d/openrevo.conf
++ install -Dm644 packaging/linux/modules-load-openrevo.conf /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/etc/modules-load.d/openrevo.conf
++ install -Dm644 packaging/linux/openrevo.service /__w/_temp/rpmbuild/BUILD/openrevo-0.9.8-build/BUILDROOT/usr/lib/systemd/user/openrevo.service
++ /usr/lib/systemd/system/openrevo-ec.service
+/var/tmp/rpm-tmp.IHuMUy: line 68: /usr/lib/systemd/system/openrevo-ec.service: No such file or directory
+error: Bad exit status from /var/tmp/rpm-tmp.IHuMUy (%install)
+
+RPM build errors:
+    Bad exit status from /var/tmp/rpm-tmp.IHuMUy (%install)
