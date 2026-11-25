@@ -39,6 +39,7 @@ Requires:       polkit
 # paths meaningful when the spec is parsed on a system without them.
 %{!?_udevrulesdir:%global _udevrulesdir %{_prefix}/lib/udev/rules.d}
 %{!?_userunitdir:%global _userunitdir %{_prefix}/lib/systemd/user}
+%{!?_sysusersdir:%global _sysusersdir %{_prefix}/lib/sysusers.d}
 
 %description
 OpenRevo drives the EC, keyboard lighting, fan curves, pause and battery limits
@@ -82,11 +83,37 @@ install -Dm644 packaging/linux/60-openrevo.rules %{buildroot}%{_udevrulesdir}/60
 install -Dm644 packaging/linux/modprobe-openrevo.conf %{buildroot}%{_sysconfdir}/modprobe.d/openrevo.conf
 install -Dm644 packaging/linux/modules-load-openrevo.conf %{buildroot}%{_sysconfdir}/modules-load.d/openrevo.conf
 install -Dm644 packaging/linux/openrevo.service %{buildroot}%{_userunitdir}/openrevo.service
+%{_unitdir}/openrevo-ec.service
+%{_sysusersdir}/openrevo.conf
+
+# Root EC broker. Without it an unprivileged app cannot read the EC at all,
+# because ec_sys and /proc/acpi/call are both root-only paths.
+install -Dm644 packaging/linux/openrevo-ec.service %{buildroot}%{_unitdir}/openrevo-ec.service
+install -Dm644 packaging/linux/sysusers-openrevo.conf %{buildroot}%{_sysusersdir}/openrevo.conf
 
 # Not setuid: pkexec plus the policy decides, and the policy pins this path.
 install -Dm755 $TARGET/release/openrevo-ec-helper %{buildroot}%{_prefix}/lib/openrevo/openrevo-ec-helper
 install -Dm644 packaging/linux/com.openrevo.ecwrite.policy \
   %{buildroot}%{_datadir}/polkit-1/actions/com.openrevo.ecwrite.policy
+
+%post
+# sysusers.d only creates the group; the users already present need adding, and
+# membership is resolved when a session starts, so a re-login may be required.
+systemd-sysusers %{_sysusersdir}/openrevo.conf 2>/dev/null || true
+if getent group openrevo-ec >/dev/null 2>&1; then
+  awk -F: '$3 >= 1000 && $3 < 65534 { print $1 }' /etc/passwd |
+    while read -r user; do
+      id -nG "$user" | tr ' ' '\n' | grep -qx openrevo-ec ||
+        usermod -aG openrevo-ec "$user" || true
+    done
+fi
+%systemd_post openrevo-ec.service
+
+%preun
+%systemd_preun openrevo-ec.service
+
+%postun
+%systemd_postun_with_restart openrevo-ec.service
 
 %files
 %license LICENSE
@@ -97,6 +124,8 @@ install -Dm644 packaging/linux/com.openrevo.ecwrite.policy \
 %config %{_sysconfdir}/modprobe.d/openrevo.conf
 %config %{_sysconfdir}/modules-load.d/openrevo.conf
 %{_userunitdir}/openrevo.service
+%{_unitdir}/openrevo-ec.service
+%{_sysusersdir}/openrevo.conf
 %{_prefix}/lib/openrevo/openrevo-ec-helper
 %{_datadir}/polkit-1/actions/com.openrevo.ecwrite.policy
 

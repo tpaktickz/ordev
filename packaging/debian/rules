@@ -40,6 +40,10 @@ override_dh_auto_install:
 	install -Dm644 packaging/linux/modprobe-openrevo.conf debian/openrevo/usr/lib/modprobe.d/openrevo.conf
 	install -Dm644 packaging/linux/modules-load-openrevo.conf debian/openrevo/usr/lib/modules-load.d/openrevo.conf
 	install -Dm644 packaging/linux/openrevo.service debian/openrevo/usr/lib/systemd/user/openrevo.service
+	# Root EC broker. dh_installsystemd enables it and dh_installsysusers creates
+	# the group; debian/openrevo.postinst then adds the users already on the box.
+	install -Dm644 packaging/linux/openrevo-ec.service debian/openrevo/lib/systemd/system/openrevo-ec.service
+	install -Dm644 packaging/linux/sysusers-openrevo.conf debian/openrevo/usr/lib/sysusers.d/openrevo.conf
 	# Not setuid: pkexec plus the policy decides, and the policy pins this path.
 	install -Dm755 $(TARGET)/release/openrevo-ec-helper debian/openrevo/usr/lib/openrevo/openrevo-ec-helper
 	install -Dm644 packaging/linux/com.openrevo.ecwrite.policy debian/openrevo/usr/share/polkit-1/actions/com.openrevo.ecwrite.policy

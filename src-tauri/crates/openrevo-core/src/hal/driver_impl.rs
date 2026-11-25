@@ -167,6 +167,13 @@ impl HardwareDriver for MechrevoHALImpl {
         if let Some(temp) = crate::pal::tongfang::read_cpu_temp_celsius() {
             return Ok(temp);
         }
+        // The Tongfang hwmon driver above only exists when our own kernel module
+        // is loaded; on a stock kernel the package sensor lives in coretemp and
+        // has to be read straight out of sysfs.
+        #[cfg(target_os = "linux")]
+        if let Some(temp) = read_linux_cpu_temp() {
+            return Ok(temp);
+        }
         let temp = crate::system::cpu_monitor::get_cpu_monitor().get_temp();
         if temp > 0 && temp < 125 {
             Ok(temp as u8)
@@ -174,4 +181,71 @@ impl HardwareDriver for MechrevoHALImpl {
             Ok(50)
         }
     }
+}
+
+/// Package temperature from sysfs, for kernels without the Tongfang driver.
+/// Prefers the hwmon `Package id 0` sensor, falls back to the hottest core,
+/// and only then to the `x86_pkg_temp` thermal zone. `acpitz` is deliberately
+/// skipped: on most Tongfang boards it reports a firmware constant, not a die
+/// temperature.
+#[cfg(target_os = "linux")]
+fn read_linux_cpu_temp() -> Option<u8> {
+    /// Anything at or above this is a sensor error, not a die reading.
+    const PLAUSIBLE_MAX_MILLI: u32 = 200_000;
+    const MAX_CELSIUS: u32 = 125;
+
+    let celsius = |milli: u32| ((milli / 1000).min(MAX_CELSIUS)) as u8;
+    let plausible = |milli: u32| milli > 0 && milli < PLAUSIBLE_MAX_MILLI;
+
+    if let Ok(entries) = std::fs::read_dir("/sys/class/hwmon") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let name = std::fs::read_to_string(path.join("name")).unwrap_or_default();
+            let name = name.trim();
+            if name != "coretemp" && name != "k10temp" && name != "zenpower" {
+                continue;
+            }
+            let mut package = None;
+            let mut hottest: Option<u32> = None;
+            for slot in 1..=64 {
+                let Ok(raw) = std::fs::read_to_string(path.join(format!("temp{slot}_input"))) else {
+                    continue;
+                };
+                let Ok(milli) = raw.trim().parse::<u32>() else {
+                    continue;
+                };
+                if !plausible(milli) {
+                    continue;
+                }
+                let label = std::fs::read_to_string(path.join(format!("temp{slot}_label")))
+                    .unwrap_or_default();
+                if label.trim() == "Package id 0" {
+                    package = Some(milli);
+                    break;
+                }
+                hottest = Some(hottest.map_or(milli, |h| h.max(milli)));
+            }
+            if let Some(milli) = package.or(hottest) {
+                return Some(celsius(milli));
+            }
+        }
+    }
+
+    if let Ok(entries) = std::fs::read_dir("/sys/class/thermal") {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            let zone = std::fs::read_to_string(path.join("type")).unwrap_or_default();
+            if zone.trim() != "x86_pkg_temp" {
+                continue;
+            }
+            if let Ok(raw) = std::fs::read_to_string(path.join("temp")) {
+                if let Ok(milli) = raw.trim().parse::<u32>() {
+                    if plausible(milli) {
+                        return Some(celsius(milli));
+                    }
+                }
+            }
+        }
+    }
+    None
 }

@@ -101,3 +101,132 @@ fn valid_request_reaches_the_hardware_and_reports_one_line() {
         );
     }
 }
+
+// ---- broker (`serve`) -------------------------------------------------------
+
+/// A running broker for the duration of one test. The child never exits on its
+/// own, so dropping the guard is what stops it.
+struct Broker {
+    child: std::process::Child,
+    socket: std::path::PathBuf,
+}
+
+impl Drop for Broker {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+        let _ = std::fs::remove_file(&self.socket);
+        if let Some(dir) = self.socket.parent() {
+            let _ = std::fs::remove_dir_all(dir);
+        }
+    }
+}
+
+impl Broker {
+    /// Starts a broker on a socket in its own temporary directory.
+    fn start(tag: &str) -> Option<Broker> {
+        let dir = std::env::temp_dir().join(format!("openrevo-ec-test-{}-{}", tag, std::process::id()));
+        std::fs::create_dir_all(&dir).ok()?;
+        let socket = dir.join("ec.sock");
+        let child = Command::new(HELPER)
+            .args(["serve", socket.to_str()?])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .spawn()
+            .ok()?;
+        let broker = Broker { child, socket };
+        // The listener binds before the first line of stdout, but the file only
+        // becomes connectable once bind() has run, so wait for it.
+        for _ in 0..200 {
+            if broker.socket.exists() {
+                return Some(broker);
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+        None
+    }
+
+    /// One request line, one reply line.
+    fn ask(&self, line: &str) -> String {
+        use std::io::{BufRead as _, BufReader};
+        let stream = std::os::unix::net::UnixStream::connect(&self.socket)
+            .expect("broker must accept connections");
+        stream.set_read_timeout(Some(std::time::Duration::from_secs(10))).ok();
+        let mut writer = stream.try_clone().expect("socket clone");
+        writer.write_all(format!("{line}\n").as_bytes()).expect("request");
+        writer.flush().ok();
+        let mut reply = String::new();
+        BufReader::new(stream).read_line(&mut reply).expect("reply");
+        reply.trim().to_string()
+    }
+}
+
+#[test]
+fn broker_answers_probe() {
+    let Some(broker) = Broker::start("probe") else {
+        eprintln!("cannot start the broker here; skipping");
+        return;
+    };
+    let reply = broker.ask("probe");
+    assert!(
+        reply.starts_with("p present="),
+        "unexpected probe reply: {reply:?}"
+    );
+}
+
+#[test]
+fn broker_rejects_malformed_requests_without_dying() {
+    let Some(broker) = Broker::start("reject") else {
+        eprintln!("cannot start the broker here; skipping");
+        return;
+    };
+    for bad in ["r", "r zz", "r 0700 11", "w", "w 0700", "frobnicate", ""] {
+        let reply = broker.ask(bad);
+        assert!(
+            reply.starts_with("err"),
+            "request {bad:?} should be refused, got {reply:?}"
+        );
+    }
+    // Still serving after all of that.
+    assert!(broker.ask("probe").starts_with("p present="));
+}
+
+#[test]
+fn broker_bounds_a_single_write_batch() {
+    let Some(broker) = Broker::start("batch") else {
+        eprintln!("cannot start the broker here; skipping");
+        return;
+    };
+    // 65 pairs is one past the helper's cap; the address range does not matter
+    // because the request is refused before any of them is touched.
+    let mut line = String::from("w");
+    for _ in 0..65 {
+        line.push_str(" 0000 00");
+    }
+    let reply = broker.ask(&line);
+    assert!(
+        reply.starts_with("err more than"),
+        "oversized batch should be refused, got {reply:?}"
+    );
+}
+
+#[test]
+fn broker_reads_are_stable_across_two_calls() {
+    let Some(broker) = Broker::start("read2") else {
+        eprintln!("cannot start the broker here; skipping");
+        return;
+    };
+    // Whatever the machine is, the same register read twice in a row must give
+    // the same shape of answer: either a byte or an explicit "unavailable".
+    let first = broker.ask("r 0740");
+    let second = broker.ask("r 0740");
+    assert_eq!(
+        first.split_whitespace().next(),
+        second.split_whitespace().next(),
+        "register 0x0740 answered differently: {first:?} then {second:?}"
+    );
+    assert!(
+        first.starts_with("v ") || first.starts_with("n "),
+        "unexpected read reply: {first:?}"
+    );
+}

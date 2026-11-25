@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+# The generated block (Debian) creates the group from sysusers.d and enables the
+# unit; this hook only fills in the members. sysusers.d cannot name users that do
+# not exist yet, and group membership is read when a session starts, so a user
+# added here has to log out and back in before the broker socket opens for them.
+#DEBHELPER#
+
+if getent group openrevo-ec >/dev/null 2>&1; then
+    awk -F: '$3 >= 1000 && $3 < 65534 { print $1 }' /etc/passwd |
+        while read -r user; do
+            if ! id -nG "$user" | tr ' ' '\n' | grep -qx openrevo-ec; then
+                usermod -aG openrevo-ec "$user" || true
+            fi
+        done
+fi
+
+exit 0

@@ -78,6 +78,11 @@ fn main() {
     }
 
     // 3. Read & Display Current Hardware Status
+    //
+    // Mode / battery limit / fan RPM come from the bridge's background poller,
+    // which takes its first EC sample half a second after start-up. Wait for it
+    // so the numbers below are measurements instead of zeroed defaults.
+    std::thread::sleep(std::time::Duration::from_millis(700));
     println!("[EC Controller Status]");
     let power_mode = ec.get_power_mode();
     let mode_str = match power_mode {

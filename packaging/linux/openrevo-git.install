@@ -1,0 +1,31 @@
+# The EC broker socket is root-owned and group-gated, so the group has to exist
+# before the service starts, and the desktop users who were already on the box
+# have to be in it - sysusers.d only creates the group itself.
+#
+# Membership is resolved when a session starts: a user added here has to log out
+# and back in (or start a new session) before the socket opens for them.
+
+_ec_group=openrevo-ec
+
+post_install() {
+  getent group "$_ec_group" >/dev/null || groupadd -r "$_ec_group"
+  awk -F: '$3 >= 1000 && $3 < 65534 { print $1 }' /etc/passwd |
+    while read -r user; do
+      id -nG "$user" | tr ' ' '\n' | grep -qx "$_ec_group" ||
+        usermod -aG "$_ec_group" "$user"
+    done
+  systemctl daemon-reload >/dev/null 2>&1 || true
+  systemctl enable --now openrevo-ec.service >/dev/null 2>&1 || true
+}
+
+post_upgrade() {
+  post_install
+}
+
+pre_remove() {
+  systemctl disable --now openrevo-ec.service >/dev/null 2>&1 || true
+}
+
+post_remove() {
+  systemctl daemon-reload >/dev/null 2>&1 || true
+}

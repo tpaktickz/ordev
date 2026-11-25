@@ -13,6 +13,7 @@ pub struct HardwareStateCache {
     pub cpu_fan_rpm: u16,
     pub gpu_fan_rpm: u16,
     pub cpu_temp: i32,
+    pub gpu_temp: i32,
     // Cooldown protection to prevent background poller from oscillating user state
     pub fan_boost_cooldown_until: Instant,
     pub power_mode_cooldown_until: Instant,
@@ -28,6 +29,7 @@ impl Default for HardwareStateCache {
             cpu_fan_rpm: 0,
             gpu_fan_rpm: 0,
             cpu_temp: 45,
+            gpu_temp: 0,
             fan_boost_cooldown_until: Instant::now(),
             power_mode_cooldown_until: Instant::now(),
             battery_limit_cooldown_until: Instant::now(),
@@ -115,6 +117,27 @@ impl EcBridge {
                     }
                     thread::sleep(Duration::from_millis(1500));
                     continue;
+                }
+
+                // 0. Temperatures: the Tongfang EC has no thermal register that
+                // Linux can read, so mirror the sources the rest of the app uses —
+                // hwmon/thermal zone for the CPU, NVML (or its nvidia-smi
+                // fallback) for the GPU. Skip the update when a source has no
+                // reading yet so the panel keeps the last known value.
+                let cpu_temp = crate::hal::get_hardware_driver()
+                    .read_cpu_temp()
+                    .unwrap_or(0) as i32;
+                let gpu_temp = crate::driver::gpu_bridge::get_global_gpu()
+                    .lock()
+                    .get_temp(0) as i32;
+                {
+                    let mut c = cache_for_poller.lock();
+                    if cpu_temp > 0 {
+                        c.cpu_temp = cpu_temp;
+                    }
+                    if gpu_temp > 0 {
+                        c.gpu_temp = gpu_temp;
+                    }
                 }
 
                 if let Some(bytes) = wmi_ec::wmi_batch_read_ec(&register_list) {
@@ -272,7 +295,7 @@ impl EcBridge {
     }
 
     pub fn get_gpu_temp(&self) -> i32 {
-        42
+        self.cache.lock().gpu_temp
     }
 
     pub fn get_power_mode(&self) -> u8 {

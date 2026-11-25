@@ -14,6 +14,9 @@ depends=(
   'openssl'
 )
 makedepends=('rust' 'cargo' 'nodejs' 'pnpm')
+# The broker is a root service and the group it exposes has to exist before the
+# socket is created, so both halves live in the install scriptlet.
+install="$pkgname.install"
 options=('!lto')
 # Both are overridable so CI can build the commit under test instead of a
 # pinned one: `_commit=$(git rev-parse HEAD) makepkg ...`
@@ -86,6 +89,13 @@ package() {
 
   install -Dm644 packaging/linux/openrevo.service \
     "$pkgdir/usr/lib/systemd/user/openrevo.service"
+
+  # Root broker: the only way an unprivileged app reaches the EC, because both
+  # ec_sys and /proc/acpi/call sit behind root-only paths.
+  install -Dm644 packaging/linux/openrevo-ec.service \
+    "$pkgdir/usr/lib/systemd/system/openrevo-ec.service"
+  install -Dm644 packaging/linux/sysusers-openrevo.conf \
+    "$pkgdir/usr/lib/sysusers.d/openrevo.conf"
 
   # Privileged EC fallback. The helper is not setuid: pkexec plus this policy
   # decides, and the policy pins the helper's own path, so the action cannot be

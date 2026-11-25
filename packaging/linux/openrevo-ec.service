@@ -1,0 +1,38 @@
+[Unit]
+Description=OpenRevo embedded controller broker
+Documentation=https://github.com/faintonce/open-revo
+# Loads ec_sys / the module parameter before the socket appears, so the first
+# client does not race a channel that is still coming up.
+After=systemd-modules-load.service
+Wants=systemd-modules-load.service
+
+[Service]
+Type=simple
+# Root for the EC channels; the group is what the socket ends up owned by, so no
+# chown (and no CAP_CHOWN) is needed.
+User=root
+Group=openrevo-ec
+ExecStart=/usr/lib/openrevo/openrevo-ec-helper serve /run/openrevo/ec.sock
+# Root-owned, world-traversable: the socket inside it is what carries the group
+# and mode, and clients need to reach the directory first.
+RuntimeDirectory=openrevo
+RuntimeDirectoryMode=0755
+Restart=on-failure
+RestartSec=2
+
+# Everything the broker does is raw EC access, either through the ec_sys debugfs
+# node or the ACPI EC ports. CAP_SYS_RAWIO is what the port path needs; nothing
+# else is required, and the broker never forks anything.
+AmbientCapabilities=CAP_SYS_RAWIO
+CapabilityBoundingSet=CAP_SYS_RAWIO
+
+# The channel lives in kernel filesystems (/sys/kernel/debug, /proc/acpi/call),
+# so /sys and /proc must stay writable while the rest of the filesystem does not.
+ProtectSystem=strict
+ReadWritePaths=/sys /proc
+ProtectHome=yes
+PrivateTmp=yes
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

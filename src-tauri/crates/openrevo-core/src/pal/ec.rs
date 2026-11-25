@@ -211,11 +211,45 @@ pub mod linux {
     const FLAT_NODE: &str = "/sys/kernel/debug/ec/ec_sys";
     /// Installed by the package for the polkit-mediated fallback.
     const HELPER_PATH: &str = "/usr/lib/openrevo/openrevo-ec-helper";
+    /// Privileged broker socket. `openrevo-ec.service` (root) serves it and
+    /// `openrevo-ec-helper serve` is what it runs; membership of the
+    /// `openrevo-ec` group is what the socket's own mode gates on. Without this
+    /// an unprivileged daemon cannot read a single EC byte, because both
+    /// `ec_sys` and `/proc/acpi/call` live under root-only paths.
+    const BROKER_SOCKET: &str = "/run/openrevo/ec.sock";
+    /// How long a broker reply may take before the connection is abandoned.
+    const BROKER_TIMEOUT: Duration = Duration::from_secs(5);
     /// Older per-device layout.
     const LEGACY_NODE: &str = "/sys/kernel/debug/ec/ec0/io";
     /// EC controllers need a short settle window between consecutive writes;
     /// back-to-back pwrite() calls are silently dropped otherwise.
     const WRITE_SETTLE: Duration = Duration::from_micros(200);
+
+    // Bank-0 mailbox of the Uniwill/Tongfang EC. The OEM Windows driver never
+    // touches the ACPI ports: it asks the firmware over WMI (method
+    // `GetSetULong` on GUID ABBC0F6F-8EA1-11d1-00A0-C90629100000), the AML
+    // implementation of which posts a 16-bit address and reads a 16-bit word
+    // through these registers. Same layout as TUXEDO's `uniwill_wmi.c`.
+    const MB_LDAT: u64 = 0x8A;
+    const MB_HDAT: u64 = 0x8B;
+    const MB_FLAGS: u64 = 0x8C;
+    const MB_CMDL: u64 = 0x8D;
+    const MB_CMDH: u64 = 0x8E;
+    const MB_RFLG: u8 = 1 << 0;
+    const MB_WFLG: u8 = 1 << 1;
+    const MB_BFLG: u8 = 1 << 2;
+    const MB_DRDY: u8 = 1 << 7;
+    /// The firmware polls for 20 × 50 ms; matching that ceiling costs nothing on
+    /// a healthy EC and covers a busy one.
+    const MB_POLL_CYCLES: usize = 20;
+    const MB_POLL_DELAY: Duration = Duration::from_millis(5);
+    /// `\proc\acpi\call` (the `acpi_call` module) evaluates an AML method as root.
+    /// It is the only userspace path that runs the mailbox under the firmware
+    /// mutex, so it cannot interleave with the kernel's battery/thermal polling.
+    const AML_NODE: &str = "/proc/acpi/call";
+    const AML_METHOD: &str = "\\_SB.AMW0.WMBC 0x0a 0x04";
+    const AML_READ: u8 = 0x01;
+    const AML_WRITE: u8 = 0x02;
 
     // ACPI EC interface (ACPI 6.x §12.2): data port 0x62, command/status 0x66.
     const PORT_DATA: u16 = 0x62;
@@ -234,6 +268,19 @@ pub mod linux {
     static PORT_LOCK: Mutex<()> = Mutex::new(());
     /// 0 = untried, 1 = granted, 2 = denied.
     static PORT_ACCESS: AtomicU8 = AtomicU8::new(0);
+    /// 0 = untried, 1 = usable, 2 = absent or not writable.
+    static AML: AtomicU8 = AtomicU8::new(0);
+    /// Mailbox page that the debugfs node maps, or 0xFF while unknown.
+    static NODE_PAGE: AtomicU8 = AtomicU8::new(0xFF);
+    /// The EC has one mailbox; two threads must not interleave register writes.
+    static MAILBOX_LOCK: Mutex<()> = Mutex::new(());
+    /// 0 = never tried, 1 = reachable, 2 = absent.
+    static BROKER: AtomicU8 = AtomicU8::new(0);
+    static BROKER_LINK: Mutex<Option<std::os::unix::net::UnixStream>> = Mutex::new(None);
+    /// The broker itself must never act as a client of its own socket: each
+    /// `broker_*` call would open another connection, whose handler re-enters
+    /// `read()`, recursing until descriptors or the stack run out.
+    static BROKER_CLIENT: AtomicBool = AtomicBool::new(true);
     static FLAT_WRITABLE: AtomicBool = AtomicBool::new(false);
 
     fn node() -> Option<&'static Path> {
@@ -416,41 +463,369 @@ pub mod linux {
         false
     }
 
-    /// Bank 0 can use the flat debugfs view; banks 1+ must go over the ports.
+    // ---- banked access through the bank-0 mailbox -----------------------
+    //
+    // Bank 0 of the debugfs node is *not* mailbox bank 0: the EC keeps the
+    // ACPI-visible 256 bytes in its own page (0x04 on Tongfang hardware), so the
+    // node is a window onto that page, not onto address 0. Everything else -
+    // fan tables in bank 6/7, fan duty in bank 7 - is reachable only through the
+    // mailbox, which the firmware exposes as the WMI method above.
+
+    fn aml_available() -> bool {
+        match AML.load(Ordering::Acquire) {
+            1 => true,
+            2 => false,
+            _ => {
+                let ok = OpenOptions::new()
+                    .read(true)
+                    .write(true)
+                    .open(AML_NODE)
+                    .is_ok();
+                AML.store(if ok { 1 } else { 2 }, Ordering::Release);
+                ok
+            }
+        }
+    }
+
+    /// One firmware mailbox transaction. Returns `(CMDL, CMDH)`.
+    ///
+    /// The 40-byte buffer is the method's input block: `[0..2]` address little
+    /// endian, `[2..4]` data, `[5]` read/write selector. The firmware echoes it
+    /// back with the answer in `[0..2]`, and `0xfe` repeated for an error.
+    fn aml_call(function: u8, addr: u16, data: u8) -> Option<(u8, u8)> {
+        if !aml_available() {
+            return None;
+        }
+        let _guard = MAILBOX_LOCK.lock().ok()?;
+        let mut buf = [0u8; 40];
+        buf[0] = addr as u8;
+        buf[1] = (addr >> 8) as u8;
+        buf[2] = data;
+        buf[5] = function;
+        let mut line = format!("{} {{", AML_METHOD);
+        for (i, byte) in buf.iter().enumerate() {
+            line.push_str(if i == 0 { "0x" } else { ", 0x" });
+            line.push_str(&format!("{:02x}", byte));
+        }
+        line.push_str("}\n");
+
+        {
+            let mut sink = OpenOptions::new().write(true).open(AML_NODE).ok()?;
+            sink.write_all(line.as_bytes()).ok()?;
+            sink.flush().ok()?;
+        }
+        // acpi_call's read handler bails out with EOF when the caller's buffer
+        // is smaller than the result (acpi_call.c: `if (len + 1 > count) return 0`),
+        // so this must be a single read with a buffer big enough for the whole
+        // reply - a chunked reader such as `read_to_string` always sees an
+        // empty file. The result is also consumed by the read that finishes it.
+        let mut raw = [0u8; 512];
+        let n = File::open(AML_NODE).ok()?.read(&mut raw).ok()?;
+        if n == 0 {
+            return None;
+        }
+        let text = std::str::from_utf8(&raw[..n]).ok()?;
+        let body = text.trim_end_matches('\0').trim();
+        if !body.starts_with('{') {
+            return None;
+        }
+        let mut bytes = body
+            .trim_start_matches('{')
+            .trim_end_matches('}')
+            .split(',')
+            .map(|tok| u8::from_str_radix(tok.trim().trim_start_matches("0x"), 16).ok());
+        let lo = bytes.next()??;
+        let hi = bytes.next()??;
+        if lo == 0xfe && hi == 0xfe {
+            return None;
+        }
+        Some((lo, hi))
+    }
+
+    fn node_byte(offset: u64) -> Option<u8> {
+        with_handle(|file| {
+            file.seek(SeekFrom::Start(offset))?;
+            let mut buf = [0u8; 1];
+            file.read_exact(&mut buf)?;
+            Ok(buf[0])
+        })
+    }
+
+    fn node_set_byte(offset: u64, value: u8) -> bool {
+        with_handle(|file| {
+            file.seek(SeekFrom::Start(offset))?;
+            file.write_all(&[value])?;
+            file.flush()
+        })
+        .is_some()
+    }
+
+    /// Mailbox read without `acpi_call`: same register dance, driven from
+    /// userspace. Correct, but each register write can be interleaved with a
+    /// kernel-initiated battery transaction, so a retry loop is mandatory.
+    fn mailbox_via_node(addr: u16) -> Option<u8> {
+        let _guard = MAILBOX_LOCK.lock().ok()?;
+        node_set_byte(MB_FLAGS, read_flags() & !MB_DRDY);
+        node_set_byte(MB_LDAT, addr as u8);
+        node_set_byte(MB_HDAT, (addr >> 8) as u8);
+        node_set_byte(MB_FLAGS, read_flags() | MB_RFLG);
+        let mut value = None;
+        for _ in 0..MB_POLL_CYCLES {
+            std::thread::sleep(MB_POLL_DELAY);
+            if node_byte(MB_FLAGS)? & MB_DRDY != 0 {
+                value = node_byte(MB_CMDL);
+                break;
+            }
+        }
+        node_set_byte(MB_FLAGS, 0);
+        value
+    }
+
+    fn read_flags() -> u8 {
+        node_byte(MB_FLAGS).unwrap_or(0)
+    }
+
+    fn mailbox_write_via_node(addr: u16, val: u8) -> bool {
+        let Ok(_guard) = MAILBOX_LOCK.lock() else {
+            return false;
+        };
+        node_set_byte(MB_FLAGS, read_flags() & !MB_DRDY);
+        node_set_byte(MB_LDAT, addr as u8);
+        node_set_byte(MB_HDAT, (addr >> 8) as u8);
+        node_set_byte(MB_CMDL, val);
+        node_set_byte(MB_CMDH, 0);
+        node_set_byte(MB_FLAGS, read_flags() | MB_WFLG);
+        std::thread::sleep(MB_POLL_DELAY * 2);
+        let mut done = false;
+        for _ in 0..MB_POLL_CYCLES {
+            std::thread::sleep(MB_POLL_DELAY);
+            if node_byte(MB_FLAGS).unwrap_or(0) & MB_DRDY != 0 {
+                done = true;
+                break;
+            }
+        }
+        node_set_byte(MB_FLAGS, 0);
+        done
+    }
+
+    fn mailbox_read(addr: u16) -> Option<u8> {
+        if aml_available() {
+            if let Some((lo, _)) = aml_call(AML_READ, addr, 0) {
+                return Some(lo);
+            }
+        }
+        if node().is_some() {
+            return mailbox_via_node(addr);
+        }
+        None
+    }
+
+    fn mailbox_write(addr: u16, val: u8) -> bool {
+        if aml_available() {
+            if aml_call(AML_WRITE, addr, val).is_some() {
+                return true;
+            }
+        }
+        if node().is_some() {
+            return mailbox_write_via_node(addr, val);
+        }
+        false
+    }
+
+    /// Which mailbox page the debugfs node is a window onto. Discovered by
+    /// comparing the first bytes of every candidate page with the node; the
+    /// answer is cached for the process lifetime. Falls back to the page seen on
+    /// Tongfang hardware when `acpi_call` is not loaded and nothing can be
+    /// compared.
+    fn node_alias_page() -> Option<u8> {
+        const UNKNOWN: u8 = 0xFF;
+        const NO_ALIAS: u8 = 0xFE;
+        match NODE_PAGE.load(Ordering::Acquire) {
+            UNKNOWN => {}
+            NO_ALIAS => return None,
+            page => return Some(page),
+        }
+        if node().is_none() {
+            NODE_PAGE.store(NO_ALIAS, Ordering::Release);
+            return None;
+        }
+        let mut probe = [0u8; 3];
+        for (i, slot) in probe.iter_mut().enumerate() {
+            *slot = node_byte(i as u64).unwrap_or(u8::MAX);
+        }
+        if aml_available() {
+            for page in [0x04u16].into_iter().chain(0x00..0x100) {
+                let base = page << 8;
+                if aml_call(AML_READ, base, 0).is_none() {
+                    continue;
+                }
+                let matched = (0..probe.len()).all(|i| {
+                    aml_call(AML_READ, base + i as u16, 0).map(|(lo, _)| lo) == Some(probe[i])
+                });
+                if matched {
+                    NODE_PAGE.store(page as u8, Ordering::Release);
+                    return Some(page as u8);
+                }
+            }
+        }
+        NODE_PAGE.store(0x04, Ordering::Release);
+        Some(0x04)
+    }
+
+    // ---- privileged broker ----------------------------------------------
+    //
+    // Both channels the rest of this module uses live behind root-only paths:
+    // `/sys/kernel/debug` is 0700 and `/proc/acpi/call` is 0660 root:root. The
+    // app itself runs as the logged-in user, so on a stock install every read
+    // here returns None and the HAL falls back to MockHAL - the machine looks
+    // like a supported laptop with dead sensors. The broker closes that gap: a
+    // root service holds the socket, the socket's group is `openrevo-ec`, and
+    // the group is what the per-user package grants. Telemetry reads a handful
+    // of registers per second, so the connection is kept open and pipelined
+    // rather than spawned per request the way `pkexec` would.
+
+    fn broker_path() -> PathBuf {
+        std::env::var_os("OPENREVO_EC_SOCKET")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(BROKER_SOCKET))
+    }
+
+    fn broker_connect() -> Option<std::os::unix::net::UnixStream> {
+        use std::os::unix::net::UnixStream;
+        let path = broker_path();
+        if !path.exists() {
+            return None;
+        }
+        let stream = UnixStream::connect(&path).ok()?;
+        stream.set_read_timeout(Some(BROKER_TIMEOUT)).ok()?;
+        stream.set_write_timeout(Some(BROKER_TIMEOUT)).ok()?;
+        Some(stream)
+    }
+
+    /// One request/response exchange. Reconnects once if the cached connection
+    /// died (broker restarted, service reloaded), and drops it on any later
+    /// failure so the next call starts clean instead of reading a stale reply.
+    fn broker_request(line: &str) -> Option<String> {
+        use std::io::{BufRead as _, BufReader, Write as _};
+        let mut link = BROKER_LINK.lock().ok()?;
+        for _ in 0..2 {
+            if link.is_none() {
+                *link = broker_connect();
+            }
+            let Some(stream) = link.as_mut() else {
+                BROKER.store(2, Ordering::Release);
+                return None;
+            };
+            let sent = stream
+                .write_all(line.as_bytes())
+                .and_then(|()| stream.write_all(b"\n"))
+                .and_then(|()| stream.flush());
+            if sent.is_err() {
+                *link = None;
+                continue;
+            }
+            let mut reply = String::new();
+            let mut reader = BufReader::new(match stream.try_clone() {
+                Ok(clone) => clone,
+                Err(_) => {
+                    *link = None;
+                    return None;
+                }
+            });
+            if reader.read_line(&mut reply).unwrap_or(0) == 0 {
+                *link = None;
+                continue;
+            }
+            BROKER.store(1, Ordering::Release);
+            return Some(reply.trim().to_string());
+        }
+        BROKER.store(2, Ordering::Release);
+        None
+    }
+
+    /// Called once by the broker's `serve()` so its own readers keep using the
+    /// privileged transports instead of looping back through the socket.
+    pub fn disable_broker_client() {
+        BROKER_CLIENT.store(false, Ordering::Release);
+    }
+
+    fn broker_client() -> bool {
+        BROKER_CLIENT.load(Ordering::Acquire)
+    }
+
+    fn broker_available() -> bool {
+        if !broker_client() {
+            return false;
+        }
+        match BROKER.load(Ordering::Acquire) {
+            1 => true,
+            2 => false,
+            _ => broker_request("probe").is_some(),
+        }
+    }
+
+    fn broker_read(addr: u16) -> Option<u8> {
+        if !broker_client() {
+            return None;
+        }
+        let reply = broker_request(&format!("r {:04x}", addr))?;
+        let mut parts = reply.split_whitespace();
+        if parts.next()? != "v" {
+            return None;
+        }
+        parts.next()?;
+        u8::from_str_radix(parts.next()?.trim_start_matches("0x"), 16).ok()
+    }
+
+    fn broker_write(entries: &[(u16, u8)]) -> bool {
+        if entries.is_empty() || !broker_client() {
+            return false;
+        }
+        let mut line = String::from("w");
+        for (addr, val) in entries {
+            line.push_str(&format!(" {:04x} {:02x}", addr, val));
+        }
+        broker_request(&line).as_deref() == Some("ok")
+    }
+
+    /// Can this address be served straight from the debugfs node?
     fn via_node(addr: u16) -> bool {
-        addr <= 0xFF && node().is_some()
+        node_alias_page().map(|page| addr >> 8 == page as u16).unwrap_or(false)
     }
 
     pub fn available() -> bool {
-        node().is_some() || port_access_granted()
+        node().is_some() || aml_available() || port_access_granted() || broker_available()
     }
 
     pub fn read(addr: u16) -> Option<u8> {
         if via_node(addr) {
-            if let Some(v) = with_handle(|file| {
-                file.seek(SeekFrom::Start(addr as u64))?;
-                let mut buf = [0u8; 1];
-                file.read_exact(&mut buf)?;
-                Ok(buf[0])
-            }) {
+            if let Some(v) = node_byte((addr & 0xFF) as u64) {
                 return Some(v);
             }
+        }
+        if let Some(v) = broker_read(addr) {
+            return Some(v);
+        }
+        if let Some(v) = mailbox_read(addr) {
+            return Some(v);
         }
         port_read(addr)
     }
 
     pub fn write(addr: u16, val: u8) -> bool {
         if via_node(addr) && FLAT_WRITABLE.load(Ordering::Acquire) {
-            let ok = with_handle(|file| {
-                file.seek(SeekFrom::Start(addr as u64))?;
-                file.write_all(&[val])?;
-                file.flush()
-            })
-            .is_some();
-            if ok {
+            if node_set_byte((addr & 0xFF) as u64, val) {
                 std::thread::sleep(WRITE_SETTLE);
                 return true;
             }
+        }
+        if broker_write(&[(addr, val)]) {
+            std::thread::sleep(WRITE_SETTLE);
+            return true;
+        }
+        if mailbox_write(addr, val) {
+            std::thread::sleep(WRITE_SETTLE);
+            return true;
         }
         if port_write(addr, val) {
             return true;
@@ -563,7 +938,7 @@ pub mod linux {
             // Force the node open so the writability flag is known.
             let _ = with_handle(|file| file.metadata().map(|_| ()));
         }
-        FLAT_WRITABLE.load(Ordering::Acquire) || port_access_granted()
+        FLAT_WRITABLE.load(Ordering::Acquire) || aml_available() || port_access_granted() || broker_available()
     }
 }
 

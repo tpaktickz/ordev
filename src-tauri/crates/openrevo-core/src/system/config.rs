@@ -656,6 +656,15 @@ fn resolve_config_dir() -> PathBuf {
         }
     }
 
+    // 3.5 Level 3.5: XDG on Linux. `%APPDATA%` does not exist there, so Level 4
+    // would fall through to the *current working directory* and drop config.json,
+    // models.json and the plugin tree into whatever directory the binary happened
+    // to be launched from.
+    #[cfg(target_os = "linux")]
+    {
+        return crate::pal::xdg::config_dir();
+    }
+
     // 4. Level 4: Standard Default (%APPDATA%\OpenRevo)
     if let Ok(app_data) = std::env::var("APPDATA") {
         PathBuf::from(app_data).join("OpenRevo")

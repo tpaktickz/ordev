@@ -1528,29 +1528,55 @@ pub fn set_custom_plugin_enabled(id: String, enabled: bool) -> Result<bool, Stri
     Ok(true)
 }
 
-pub fn find_plugin_dir(plugin_id: &str) -> std::path::PathBuf {
-    let base = get_plugins_dir();
+/// Sample skins shipped next to the sources. They only exist in a checkout, so
+/// an installed build silently skips the second lookup; keeping it as a
+/// fallback is what lets a fresh profile preview the bundled skins before the
+/// user installs anything.
+fn sample_plugins_dir() -> Option<std::path::PathBuf> {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("..")
+        .join("plugins_sample")
+        .join("slint");
+    dir.is_dir().then(|| dir)
+}
+
+/// Direct hit or manifest-id scan inside one plugins root.
+fn lookup_plugin_in(base: &std::path::Path, plugin_id: &str) -> Option<std::path::PathBuf> {
     let direct = base.join(plugin_id);
     if direct.exists() {
-        return direct;
+        return Some(direct);
     }
-    if let Ok(entries) = std::fs::read_dir(&base) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if path.is_dir() {
-                let manifest_path = path.join("manifest.json");
-                if let Ok(content) = std::fs::read_to_string(&manifest_path) {
-                    if let Ok(manifest) = serde_json::from_str::<RawPluginManifest>(&content) {
-                        if manifest.id.as_deref() == Some(plugin_id) {
-                            return path;
-                        }
-                    }
-                }
-            }
+    let entries = std::fs::read_dir(base).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let Ok(content) = std::fs::read_to_string(path.join("manifest.json")) else {
+            continue;
+        };
+        let Ok(manifest) = serde_json::from_str::<RawPluginManifest>(&content) else {
+            continue;
+        };
+        if manifest.id.as_deref() == Some(plugin_id) {
+            return Some(path);
+        }
+    }
+    None
+}
+
+pub fn find_plugin_dir(plugin_id: &str) -> std::path::PathBuf {
+    let base = get_plugins_dir();
+    if let Some(found) = lookup_plugin_in(&base, plugin_id) {
+        return found;
+    }
+    if let Some(samples) = sample_plugins_dir() {
+        if let Some(found) = lookup_plugin_in(&samples, plugin_id) {
+            return found;
         }
     }
 
-    direct
+    base.join(plugin_id)
 }
 
 #[tauri::command]
