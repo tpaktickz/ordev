@@ -155,9 +155,10 @@ pub fn processes() -> &'static dyn ProcessPort;
    - 应用的四档电源模式映射到 `platform_profile`：办公→`LOW_POWER`、均衡→`BALANCED`、狂暴→`BALANCED_PERFORMANCE`、极客→`PERFORMANCE`。
    - DC 供电时切高性能/全速会被固件拒绝（`EOPNOTSUPP`），前端要按 `SYSTEM_AC_TYPE` 置灰而非报错。
    - 驱动未进 mainline（`REFERENCES.md` §1），所以本路径**可能整条缺席**，必须有后备。
-2. **`LinuxEcDriver`** — `sudo modprobe ec_sys write_support=1`，节点 `/sys/kernel/debug/ec/ec_sys`。
+2. **`LinuxEcDriver`** — 先认 `/sys/kernel/debug/ec/ec_sys`（`modprobe ec_sys write_support=1`），没有再退 `ec0/io`。
    - 偏移与掩码全部取自 `vault.rs` 已登记的物理地址；读写走 `pal::ec()`。
    - `EcSysPort` 内置 `Mutex<File>` + 200 µs 写后延时（沿用 `ec_bridge.rs` 现有节流参数，不改时序）。
+   - 见下方「EC 实测」：实机上 `ec_sys` 平铺节点**根本不出现**，只有 `ec0/io`，且 `ec0/io` 只覆盖 256 字节的一页。
 3. **`MockHAL`** — 无硬件（本开发机就是这种情况：VirtualBox，无 WMI、无 EC）。
 
 落地要求：
@@ -167,6 +168,34 @@ pub fn processes() -> &'static dyn ProcessPort;
 - 权限：`ec_sys` 走 udev 规则或组（P5），否则 debugfs 需 root。
 
 验收：编译通过 + `MockHAL` 降级路径可跑；真机上 `hardware_probe` 命中 `TongfangWmiDriver` 并读到双风扇转速与四档模式。
+
+### EC 实测（MECHREVO 同方实机，2026-11）
+
+这台机器上三条预设路径全部落空，最后走的是**固件自己给 WMI 留的那条**：
+
+| 路径 | 实测结果 |
+| :--- | :--- |
+| `tongfang_mifs` hwmon | 不存在。内核自带的 `uniwill-laptop.ko` 只 alias `dmi:svnTUXEDO*`，本机 `svn=MECHREVO` → `No such device` |
+| `ec_sys` 平铺节点 | `modprobe ec_sys write_support=1` 后仍无 `ec_sys`；`/sys/kernel/debug/ec/` 下只有 `ec0/{gpe,io,use_global_lock}`，`io` 是 0700 root |
+| EC 端口 0x62/0x66 | 判死。写命令后状态寄存器变 `0x0a`（BURST+IBF）随后恒 `0x00`，**OBF 永不置位**——内核 `acpi_ec` 持有 EC 并抢走了数据 |
+| **`AcpiTest_MULong`（WMI）** | **可用**。`/proc/acpi/call` 调 `\_SB.AMW0.WMBC 0x0a 0x04 {40 字节}` |
+
+固件侧反编译（`acpica` 的 `dsdt.dsl`，23 个 SSDT 均已核）给出了完整落点：`AMW0._WDG` 里 `ABBC0F6F-8EA1-11D1-00A0-C90629100000` 的 ObjectId 是 `BC`、instance 10，即 Windows 侧的 `AcpiTest_MULong`。调用链 `WMBC(Arg1=4) → OEMG → RKBC`（读）/ `WKBC`（写），寄存器是 bank-0 邮箱：`LDAT=0x8a`、`HDAT=0x8b`、`FLAGS=0x8c`（bit0 RFLG、bit1 WFLG、bit2 BFLG、bit3 CFLG、bit7 DRDY）、`CMDL=0x8d`、`CMDH=0x8e`，全程持固件互斥 `\ECMX`，轮询间隔就是固件里的 `Sleep(0x32)`。这与 TUXEDO 的 `uniwill_wmi.c` 同构，所以不必自己发明协议。
+
+由此得到两条硬结论：
+
+1. **一次读返回的是 16 位对**：地址 `A` 的读给出 `CMDL=byte[A]`、`CMDH=byte[A+1]`。所以 `ADDR_*_B1`/`_B2` 的语义是"高字节/低字节"，转速 `= (byte[A] << 8) | byte[A+1]`（大端取），不是两个独立寄存器。用 `stress-ng --cpu 20` 把封装温度从 45 °C 拉到 82 °C 验证过：`0x464` 与 `0x46c` 各自从约 1900 RPM 爬到 4100~4600 再回落，两路互不干扰。
+2. **邮箱页 0x04 就是 `ec0/io` 的那 256 字节**：`ec0/io` 前 16 字节与 AML 读 `0x400…0x40f` 完全相同。因此只要地址落在 `0x400–0x4ff`，读 `ec0/io` 的对应偏移即可（0.6 ms），不必每次付固件那 50 ms 的 `Sleep`；其它页只能走 AML。
+
+`/proc/acpi/call` 有个反直觉的读语义（`acpi_call.c:339` 起）：缓冲区小于结果长度时它 `return 0` 而不是短读，读满一次还会把结果清空。所以 Rust 侧**必须一次性 `read` 进 ≥512 字节缓冲**再解析——`read_to_string` 内部先读 32 字节，永远拿到空串（表现为"shell `cat` 正常、程序拿不到"）。
+
+### 权限：常驻 broker，不是 pkexec
+
+读路径每秒要取十几个寄存器，每次 `pkexec` 一个进程加一次授权完全不可行；而两条通道都是 root-only。所以 `openrevo-ec-helper` 增加了 `serve` 模式：root 常驻，监听 `/run/openrevo/ec.sock`（`root:openrevo-ec`、`0660`），**能否连接就是授权模型**——组员连得上，非组员连不上。客户端在 `pal::ec()` 里保持长连接，行协议 `r <addr16>` / `w <addr16> <byte8>…`（单批不超 64 对）/ `probe`，畸形请求回 `err` 但不断连接。
+
+broker 进程必须禁掉自己的客户端（`pal::ec::linux::disable_broker_client()`），否则 `read()` 会经 `broker_read` 连回自身 socket，逐层递归到 fd 耗尽——这个坑踩过一次，初读从 257 ms 涨到 10.7 s，backtrace 里全是 `broker_request`。
+
+配套分发：`packaging/linux/openrevo-ec.service`（`RuntimeDirectory=openrevo`、`Group=openrevo-ec`、`CapabilityBoundingSet=CAP_SYS_RAWIO`、`ProtectSystem=strict` + `ReadWritePaths=/sys /proc`）、`packaging/linux/sysusers-openrevo.conf`（建 `openrevo-ec` 组）、pacman 的 `.install` 脚本与 deb/rpm 的 post 脚本负责把桌面用户加进组（幂等）。**装完要重新登录**，组身份才会生效。
 
 ---
 
@@ -200,6 +229,10 @@ pub fn processes() -> &'static dyn ProcessPort;
 - 色彩：gamma 写 `/sys/class/drm/<conn>/gamma`；ICC 关联落 `<XDG data>/openrevo/associations.conf`。
 - 设备开关：触摸板走 EC 位，无线电走 `/sys/class/rfkill`，摄像头走 `/sys/class/video4linux`，麦克风走 `wpctl`/`pactl`。
 - 文件对话框：`zenity` → `kdialog`。
+- EC 读写：`pal::ec()` 三级通道（debugfs 节点 → AML 邮箱 → 端口）+ 常驻 broker（见 P2「EC 实测」）。实机已验证：读 `0x740` 57 ms、读节点页 `0x464` 0.6 ms、写 `0x7a6` 幂等回读一致。
+- GPU 遥测：`driver/nvml.rs` 在 Linux 加载 `libnvidia-ml.so.1`（原来只试 `nvml.dll`，必失败），不再需要 `nvidia-smi` 子进程；`VBIOS TGP` 50/115 W 可直接读到。
+- 温度：`ec_bridge` 的 `cpu_temp`/`gpu_temp` 原本是写死的 45/42 常量，现在每轮轮询取 `coretemp` 的 `Package id 0`（跳过 `acpitz`，同方主板报固件常量）与 NVML。
+- 配置目录：`resolve_config_dir()` 在 Linux 上曾落到 `PathBuf::from(".")`，把 `config.json`/`models.json`/`plugins` 全写进启动目录；现在走 `pal::xdg::config_dir()` → `~/.config/openrevo`。
 
 热键与输入（`ae9d9fc` 之后）：`pal/evdev.rs` 被动读 `/dev/input/event*`（不 `EVIOCGRAB`），`pal/keymap.rs` 把 evdev code 折回项目已有的 Win32 VK 词表，`hooks_linux.rs` 复刻锁键去抖与 toast。空闲时刻来自同一事件流，`pal::power::last_input_tick` 不再恒 `None`。**portal `GlobalShortcuts` 仍未接**：它只在有会话 portal 的桌面可用，且需要持久 token，属于后续增强，不影响 evdev 路径。
 
@@ -256,7 +289,7 @@ export component MainWindow inherits Window {
 1. `PKGBUILD` —— **已落地**（`packaging/linux/PKGBUILD`，`openrevo-git`）：`depends` 只放真实硬依赖（webkit2gtk-4.1、gtk3、librsvg、libappindicator-gtk3、hicolor-icon-theme、openssl），`zenity`/`wlr-randr`/`powerprofilesctl` 之类是可选运行时不上 `depends`。装 bin、desktop、三级 hicolor 图标、udev、modprobe、modules-load、user unit、LICENSE。`makepkg --printsrcinfo` 通过。
 2. `udev` 规则 —— **已落地**（`packaging/linux/60-openrevo.rules`）：hidraw（048d:600b、048d:ce00）与 `backlight` 打 `uaccess`；`/etc/modules-load.d/openrevo.conf` 写 `ec_sys`。
 3. `modprobe` 参数 `write_support=1` —— **已落地**（`packaging/linux/modprobe-openrevo.conf`）。
-4. 特权写 —— **已落地（opt-in）**：`crates/openrevo-core/src/bin/openrevo-ec-helper.rs` 是唯一以 root 运行的代码（`probe` / `read <addr16>` / `write` 读 stdin 的 `w <addr16> <value8>`，上限 64 条，其余 token 一律拒绝）；`packaging/linux/com.openrevo.ecwrite.policy` 用 `annotate org.freedesktop.policykit.exec.path` 把 action 钉在这个路径上，三档都是 `auth_admin_keep`。`pal::ec::helper_write` 只在 `OPENREVO_EC_HELPER=1` 时启用（开机弹授权框很扰民，且内核模块覆盖了大多数机器），节点与端口都失败时才走到它，整批写共用一次授权。代价：每次走这条路都是一个 `pkexec` 进程，读路径不走它（读失败就报未知）。
+4. 特权读写 —— **已落地，改常驻 broker**：`crates/openrevo-core/src/bin/openrevo-ec-helper.rs` 仍是唯一以 root 运行的代码，但不再靠 `pkexec` 每次拉起：`serve` 子命令常驻监听 `/run/openrevo/ec.sock`（`root:openrevo-ec` 0660），组成员连得上即授权。请求是行协议 `r <addr16>` / `w <addr16> <value8>`（单批不超 64 对）/ `probe`，其余 token 一律拒绝且不断连接。`packaging/linux/com.openrevo.ecwrite.policy` 保留给"未装服务、临时用 pkexec"的场合；`pal::ec::helper_write` 仍只在 `OPENREVO_EC_HELPER=1` 时启用，节点、broker、邮箱、端口全失败才走到它。
 5. `systemd --user` unit —— **已落地**（`packaging/linux/openrevo.service`，`Restart=on-failure`、`PartOf=graphical-session.target`、不带 `--visible` 即零占用待机）。与 XDG autostart 二选一，同时开会起两个进程（single-instance 会折叠）。
 6. CI —— **已落地**：`.github/workflows/build-linux.yml`（check/test/clippy + Arch 容器打包）与 `.github/workflows/release.yml`（新增 `build-linux` job 出 `OpenRevo-<tag>-x86_64.pkg.tar.zst` + `checksums-linux.txt`；发布步骤抽成 `publish` job，`needs: [build-windows, build-linux]` 后统一挂到 Release，避免两个 job 并发写同一个 release）。`PKGBUILD` 的 `_repo`/`_commit` 可由环境覆盖，CI 因此构建被测 commit 而不是钉死的 ref。
 
@@ -277,7 +310,7 @@ export component MainWindow inherits Window {
 
 ## 风险
 
-1. **`ec_sys` 需 root/debugfs**：未配置 udev 时功能全空，必须在 P5 之前完成权限，否则 P2 验收不可复现。
+1. **EC 通道全是 root-only**：`/sys/kernel/debug` 是 0700，`/proc/acpi/call` 是 0660 root:root。udev 改不了 debugfs，所以权限统一由 `openrevo-ec` 组加常驻 broker 解决；`/etc/modules-load.d` 里的 `ec_sys` 只影响 `ec0/io` 是否出现。组成员资格要重新登录才生效，否则 HAL 只会安静地回落到 `MockHAL`。
 2. **`ec_sys` 无锁**：并发 SC/EC 写会丢字节，靠 `EcSysPort` 串行化与写延时节流；`wmi_ec` 的重试语义要在 Linux 分支保留。
 3. **portal 全局快捷键不通用**：Plasma 支持，其他 compositor 不保证；降级路径必须有。
 4. **Slint + winit 在 Wayland 的窗口定位**：`set_position` 可能被 compositor 忽略，OSD 位置要按屏幕比例兜底。
