@@ -4373,6 +4373,9 @@ dependencies = [
 name = "openrevo-osd"
 version = "0.1.0"
 dependencies = [
+ "cairo-rs",
+ "gtk",
+ "libloading 0.8.9",
  "openrevo-core",
  "serde_json",
  "slint",

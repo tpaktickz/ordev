@@ -22,6 +22,14 @@ slint = { version = "1", default-features = false, features = [
 ] }
 openrevo-core = { path = "../openrevo-core" }
 serde_json = "1.0"
+
+# Wayland layer-shell hosting: GTK3 owns the layer surface, Slint's software
+# renderer paints into it. Optional at runtime (the library is dlopen'd), so a
+# machine without gtk-layer-shell simply keeps the plain winit window.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+cairo-rs = "0.18"
+libloading = "0.8"
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [

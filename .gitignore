@@ -61,3 +61,6 @@ AGENTS.md
 agents.md
 docs/**/*踩坑*.md
 docs/slint移植踩坑报告.md
+
+# local build/CI logs and screenshots
+.ci-logs/

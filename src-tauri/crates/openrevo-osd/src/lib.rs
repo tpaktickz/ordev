@@ -26,6 +26,51 @@ use windows::Win32::UI::WindowsAndMessaging::{
 
 pub mod ipc;
 
+#[cfg(target_os = "linux")]
+pub mod layer_shell;
+
+#[cfg(target_os = "linux")]
+static LAYER_POSITION: Mutex<String> = Mutex::new(String::new());
+
+/// Sticky OSD position, needed by the layer surface: anchoring is applied once
+/// the window exists and again on every change, and the value has to survive
+/// until then.
+#[cfg(target_os = "linux")]
+pub fn current_position() -> String {
+    let pos = LAYER_POSITION.lock().map(|p| p.clone()).unwrap_or_default();
+    if pos.is_empty() { "top-left".to_string() } else { pos }
+}
+
+#[cfg(target_os = "linux")]
+fn remember_position(position: &str) {
+    if let Ok(mut p) = LAYER_POSITION.lock() {
+        *p = position.to_string();
+    }
+}
+
+#[cfg(target_os = "linux")]
+fn osd_log(msg: &str) {
+    use std::io::Write;
+    let dir = openrevo_core::pal::xdg::cache_home().join("openrevo");
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(dir.join("osd.log"))
+    {
+        let _ = writeln!(
+            f,
+            "[{}] {}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_millis(),
+            msg
+        );
+    }
+}
+
+#[cfg(not(target_os = "linux"))]
 fn osd_log(msg: &str) {
     use std::io::Write;
     if let Ok(mut f) = std::fs::OpenOptions::new().create(true).append(true).open("C:\\Users\\faint\\.openrevo_osd.log") {
@@ -365,6 +410,13 @@ fn hide_window(hwnd: SafeHwnd) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = hwnd;
+        // A layer surface that is hidden loses its buffer, and the next reveal would
+        // start from a blank frame. The card animates itself out of view instead, so
+        // the surface stays mapped and simply shows nothing.
+        if layer_shell::active() {
+            osd_log("hide_window: layer surface stays mapped");
+            return;
+        }
         let _ = with_osd_ui(|ui| ui.window().hide());
     }
 }
@@ -386,6 +438,10 @@ fn show_window_no_activate(hwnd: SafeHwnd) {
     #[cfg(not(target_os = "windows"))]
     {
         let _ = hwnd;
+        if layer_shell::active() {
+            let _ = with_osd_ui(|ui| ui.window().show());
+            return;
+        }
         let _ = with_osd_ui(|ui| ui.window().show());
     }
 }
@@ -615,6 +671,11 @@ pub fn handle_ipc_message(
                 cfg.theme = theme.clone();
                 cfg.scale = scale.clone();
                 cfg.position = position.clone();
+            }
+            #[cfg(target_os = "linux")]
+            {
+                remember_position(&position);
+                layer_shell::apply_position(&position);
             }
             let _ = slint::invoke_from_event_loop(move || {
                 if let Some(ui) = weak.upgrade() {
@@ -933,6 +994,16 @@ pub fn run_osd_standalone() {
     }));
 
     osd_log("run_osd_standalone entered");
+
+    // A Wayland layer surface has to exist before the component does: whether the
+    // window is a plain toplevel or an overlay is decided by which platform Slint
+    // registers, and the platform cannot be swapped afterwards.
+    #[cfg(target_os = "linux")]
+    if layer_shell::install() {
+        osd_log("OSD hosted in a wl_surface layer (overlay)");
+    } else {
+        osd_log("OSD hosted in a plain toplevel window");
+    }
 
     let osd = match OsdWindow::new() {
         Ok(w) => w,
