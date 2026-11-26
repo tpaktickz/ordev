@@ -83,8 +83,6 @@ install -Dm644 packaging/linux/60-openrevo.rules %{buildroot}%{_udevrulesdir}/60
 install -Dm644 packaging/linux/modprobe-openrevo.conf %{buildroot}%{_sysconfdir}/modprobe.d/openrevo.conf
 install -Dm644 packaging/linux/modules-load-openrevo.conf %{buildroot}%{_sysconfdir}/modules-load.d/openrevo.conf
 install -Dm644 packaging/linux/openrevo.service %{buildroot}%{_userunitdir}/openrevo.service
-%{_unitdir}/openrevo-ec.service
-%{_sysusersdir}/openrevo.conf
 
 # Root EC broker. Without it an unprivileged app cannot read the EC at all,
 # because ec_sys and /proc/acpi/call are both root-only paths.
