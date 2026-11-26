@@ -783,7 +783,7 @@ fn linux_cpu_max_mhz() -> Option<u32> {
 /// Package temperature from coretemp/k10temp/zenpower. `acpitz` is deliberately
 /// skipped: on these Tongfang boards it reports a firmware constant.
 #[cfg(target_os = "linux")]
-fn linux_cpu_temp_celsius() -> Option<i32> {
+pub(crate) fn linux_cpu_temp_celsius() -> Option<i32> {
     const PLAUSIBLE_MAX_MILLI: i32 = 200_000;
     const MAX_CELSIUS: i32 = 125;
 

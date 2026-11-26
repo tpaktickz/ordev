@@ -135,6 +135,11 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             if let Some(v) = wmi_ec::wmi_read_ec(wmi_ec::ADDR_CAMERA_CUTOFF) {
                 wmi_ec::wmi_write_ec(wmi_ec::ADDR_CAMERA_CUTOFF, v & !wmi_ec::MASK_QKEY_WHITE_CAMERA_CUTOFF);
             }
+            // Bit 6 of this same address is the fan-manual switch, and the EC drops an
+            // injected RAM fan table the instant that bit clears. Clearing the Q-Key
+            // white bit therefore also hands the fans back to the EC curve — take them
+            // back whenever the injected table is the thing actually driving them.
+            super::fan_table::assert_fan_manual();
 
             // Physical Mode & Chassis Q-Key LED: Office (0xA0 = low white / green)
             let base_clamp = 0xA0;
@@ -217,6 +222,11 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             if let Some(v) = wmi_ec::wmi_read_ec(wmi_ec::ADDR_CAMERA_CUTOFF) {
                 wmi_ec::wmi_write_ec(wmi_ec::ADDR_CAMERA_CUTOFF, v & !wmi_ec::MASK_QKEY_WHITE_CAMERA_CUTOFF);
             }
+            // Bit 6 of this same address is the fan-manual switch, and the EC drops an
+            // injected RAM fan table the instant that bit clears. Clearing the Q-Key
+            // white bit therefore also hands the fans back to the EC curve — take them
+            // back whenever the injected table is the thing actually driving them.
+            super::fan_table::assert_fan_manual();
 
             // Physical Mode & Chassis Q-Key LED: Balanced (0x00 = medium white / blue)
             let base_clamp = 0x00;
@@ -308,6 +318,11 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             if let Some(v) = wmi_ec::wmi_read_ec(wmi_ec::ADDR_CAMERA_CUTOFF) {
                 wmi_ec::wmi_write_ec(wmi_ec::ADDR_CAMERA_CUTOFF, v & !wmi_ec::MASK_QKEY_WHITE_CAMERA_CUTOFF);
             }
+            // Bit 6 of this same address is the fan-manual switch, and the EC drops an
+            // injected RAM fan table the instant that bit clears. Clearing the Q-Key
+            // white bit therefore also hands the fans back to the EC curve — take them
+            // back whenever the injected table is the thing actually driving them.
+            super::fan_table::assert_fan_manual();
 
             // Physical Mode & Chassis Q-Key LED: Turbo / Beast (0x10 = high white / red)
             let base_clamp = 0x10;

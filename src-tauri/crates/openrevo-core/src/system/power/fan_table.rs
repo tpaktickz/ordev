@@ -205,6 +205,101 @@ pub fn build_custom_fan_table(
     }
 }
 
+/// Table handed to the EC by the most recent commit, kept only so the diagnostic
+/// sweep in [`schedule_verification`] has something to compare the fans against.
+static LAST_APPLIED: std::sync::Mutex<Option<FanTableData>> = std::sync::Mutex::new(None);
+
+/// Hand the fans to the AP by setting ADDR_FAN_MANUAL_BYTE bit 6 (0x40) — the switch
+/// the EC checks before it will run an injected table — keeping the neighbouring
+/// camera-cutoff bit 3 intact.
+pub(crate) fn assert_fan_manual() {
+    use crate::driver::wmi_ec;
+    let Some(val) = wmi_ec::wmi_read_ec(wmi_ec::ADDR_FAN_MANUAL_BYTE) else {
+        return;
+    };
+    if (val & wmi_ec::FAN_MANUAL_ENABLE_BIT) != 0 {
+        return;
+    }
+    let ok = wmi_ec::wmi_write_ec(wmi_ec::ADDR_FAN_MANUAL_BYTE, val | wmi_ec::FAN_MANUAL_ENABLE_BIT);
+    crate::log_info!(
+        "POWER_MODE",
+        "fan manual mode asserted: {:#04x} -> {:#04x} on {:#06x} (ok={})",
+        val,
+        val | wmi_ec::FAN_MANUAL_ENABLE_BIT,
+        wmi_ec::ADDR_FAN_MANUAL_BYTE,
+        ok
+    );
+}
+
+/// The step whose upper temperature threshold still exceeds `temp`.
+fn step_for_temp(upt: &[u8; 16], temp: u8) -> usize {
+    for (i, &t) in upt.iter().enumerate() {
+        if t == 255 || temp < t {
+            return i;
+        }
+    }
+    15
+}
+
+/// Live duty of both fans straight from the EC, before any ramp has started.
+fn live_fan_duty() -> Option<(u8, u8)> {
+    use crate::driver::wmi_ec;
+    if wmi_ec::ADDR_MAIN_FAN_L_DUTY_BYTE == 0 || wmi_ec::ADDR_MAIN_FAN_R_DUTY_BYTE == 0 {
+        return None;
+    }
+    let left = wmi_ec::wmi_read_ec(wmi_ec::ADDR_MAIN_FAN_L_DUTY_BYTE)?;
+    let right = wmi_ec::wmi_read_ec(wmi_ec::ADDR_MAIN_FAN_R_DUTY_BYTE)?;
+    Some((left, right))
+}
+
+/// Whether the duty the EC is holding matches what `table` asks for at `temp`.
+///
+/// The EC follows a temperature step with a ramp delay, so a reading taken one or
+/// two steps late still proves the table is live: a firmware that ignores the table
+/// sits on its own curve (0x32 here) and matches none of them. Accepting only the
+/// exact step made a mode switch at 57 °C read as "ignored" while the fans were
+/// still climbing out of the 60 duty that the previous step asked for.
+fn firmware_follows_table(table: &FanTableData, temp: u8, duty: (u8, u8)) -> bool {
+    const DUTY_TOLERANCE: i16 = 6;
+    // The EC follows the table with a lag: right after a threshold crossing the duty
+    // is still climbing out of the previous step's value, and a single-point compare
+    // then reads as "ignored" (seen at 57 °C, where the step asks 0x46 while the fan
+    // still held the 0x3c of the 55 °C step). Accept any step inside a small lag
+    // window; a firmware that ignores the table sits on its own curve (0x32 here) and
+    // matches none of them.
+    const RAMP_LAG_STEPS: usize = 2;
+    let step = step_for_temp(&table.cpu_upt, temp);
+    let lowest = step.saturating_sub(RAMP_LAG_STEPS);
+    let got = duty.0.max(duty.1) as i16;
+    (lowest..=step).any(|i| (got - table.cpu_duty[i] as i16).abs() <= DUTY_TOLERANCE)
+}
+
+/// Re-read the hardware a ramp-length later and report whether the table actually
+/// drives the fans. Diagnostic only: like the Windows build, every mode switch
+/// writes the table regardless of what the last reading said, so a switch taken
+/// while the fans were still ramping can never disable injection.
+fn schedule_verification(table: FanTableData) {
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_secs(28));
+        let (Some(temp), Some(duty)) = (
+            crate::pal::tongfang::read_cpu_temp_celsius(),
+            live_fan_duty(),
+        ) else {
+            return;
+        };
+        let step = step_for_temp(&table.cpu_upt, temp);
+        if firmware_follows_table(&table, temp, duty) {
+            crate::log_info!("POWER_MODE", "fan table verdict: honoured ({} °C, EC holds {:#04x}/{:#04x})", temp, duty.0, duty.1);
+        } else {
+            crate::log_warn!(
+                "POWER_MODE",
+                "fan table verdict: EC not following the table yet ({} °C step {} asks {:#04x}, EC holds {:#04x}/{:#04x})",
+                temp, step, table.cpu_duty[step], duty.0, duty.1
+            );
+        }
+    });
+}
+
 pub fn apply_fan_table_to_ec(table: &FanTableData) {
     use crate::driver::wmi_ec;
 
@@ -219,6 +314,16 @@ pub fn apply_fan_table_to_ec(table: &FanTableData) {
             let _ = wmi_ec::wmi_write_ec(wmi_ec::ADDR_AP_OEM_BYTE, val | 0x01);
         }
     }
+
+    // 0b. Hand fan control to the AP. ADDR_FAN_MANUAL_BYTE bit 6 (0x40) is the switch
+    // the EC actually checks before it will run an injected table. Without it the whole
+    // 96-entry write below is accepted, latched and ignored: measured on this chassis
+    // (0x727=0x88, i7-14650HX) the EC held its own 0x32 idle duty while the table asked
+    // for 0x60, and with 0x727=0xC8 it tracked the table instead (0x48 → 0x80 following
+    // duty[2]=0x80, and 0x7d → 0x3c on the way back down). Read-modify-write, because
+    // this byte shares bit 3 with ADDR_CAMERA_CUTOFF — clearing that would switch a
+    // camera the user turned off back on.
+    assert_fan_manual();
 
     // Official Mechrevo / Uniwill EC specification & Ground-Truth Live Sniffer Rules:
     // 1. Write full CPU & GPU temperature thresholds (UpT, DownT, GPU UpT, GPU DownT).
@@ -305,4 +410,58 @@ pub fn apply_fan_table_to_ec(table: &FanTableData) {
         table.cpu_duty,
         table.gpu_duty
     );
+
+    if let Ok(mut guard) = LAST_APPLIED.lock() {
+        *guard = Some(table.clone());
+    }
+    schedule_verification(table.clone());
+}
+
+#[cfg(test)]
+mod verdict_tests {
+    use super::*;
+
+    fn table() -> FanTableData {
+        FAN_TABLE_TURBO.clone()
+    }
+
+    #[test]
+    fn step_selection_follows_upper_thresholds() {
+        let t = table();
+        // Step 0 is the zero-rpm standby step: anything at or above its 0 °C threshold moves on.
+        assert_eq!(step_for_temp(&t.cpu_upt, 0), 1);
+        assert_eq!(step_for_temp(&t.cpu_upt, 54), 1);
+        assert_eq!(step_for_temp(&t.cpu_upt, 57), 2);
+        assert_eq!(step_for_temp(&t.cpu_upt, 100), 11);
+    }
+
+    #[test]
+    fn duty_within_tolerance_counts_as_obeyed() {
+        let t = table();
+        let want = t.cpu_duty[step_for_temp(&t.cpu_upt, 50)];
+        assert!(firmware_follows_table(&t, 50, (want, want)));
+        assert!(firmware_follows_table(&t, 50, (want + 6, want)));
+        assert!(!firmware_follows_table(&t, 50, (want + 7, want)));
+    }
+
+    #[test]
+    fn ramp_lag_still_counts_as_obeyed() {
+        // Regression: a switch taken right after a threshold crossing evaluated the
+        // live duty against the new step only and declared the firmware "ignored"
+        // (57 °C, step asks 0x46, fan still held 0x3c from the 55 °C step).
+        let t = table();
+        let hot = step_for_temp(&t.cpu_upt, 57);
+        assert!(t.cpu_duty[hot] > t.cpu_duty[hot - 1], "test only makes sense when the next step is louder");
+        let lagging = t.cpu_duty[hot - 1];
+        assert!(firmware_follows_table(&t, 57, (lagging, lagging)));
+        // ...but the idle duty of a firmware that ignores the table is still caught.
+        assert!(!firmware_follows_table(&t, 57, (0x32, 0x32)));
+    }
+
+    #[test]
+    fn idle_duty_of_this_firmware_reads_as_ignored() {
+        // The whole point: a flat 0x60 table is thrown away by an EC that sits at 0x32.
+        let t = FAN_TABLE_GAMING.clone();
+        assert!(!firmware_follows_table(&t, 50, (0x32, 0x32)));
+    }
 }

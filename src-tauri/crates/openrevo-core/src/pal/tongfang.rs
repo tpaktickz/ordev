@@ -112,10 +112,20 @@ pub fn describe() -> String {
 }
 
 /// CPU package temperature in Celsius, from the kernel's millidegree value.
+///
+/// The Tongfang hwmon is preferred when the vendor WMI driver is loaded, but that
+/// driver is not installed on most distros — on this chassis (MECHREVO JIGUANG,
+/// kernel 7.3.6) `/sys/class/hwmon/*/name` only ever reports `coretemp`, so the
+/// vendor node alone made every temperature read `None` and silently disabled the
+/// fan-table verdict check. Fall back to the generic CPU sensors instead.
 pub fn read_cpu_temp_celsius() -> Option<u8> {
-    let dir = hwmon_dir()?;
-    let milli = read_u32(&dir.join("temp1_input"))?;
-    Some((milli / 1000).min(255) as u8)
+    if let Some(dir) = hwmon_dir() {
+        if let Some(milli) = read_u32(&dir.join("temp1_input")) {
+            return Some((milli / 1000).min(255) as u8);
+        }
+    }
+    crate::system::cpu_monitor::linux_cpu_temp_celsius()
+        .map(|c| c.clamp(0, 255) as u8)
 }
 
 /// (CPU, GPU) fan RPM from hwmon. The system fan (fan3) is intentionally
