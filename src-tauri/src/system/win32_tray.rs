@@ -89,6 +89,14 @@ pub(super) fn perform(action: TrayAction) {
     }
 }
 
+/// Repaint the tray menu after state changed somewhere other than the menu
+/// itself (Slint panel, hotkey, physical Q-key). A no-op on Windows, where the
+/// popup menu is rebuilt on every right-click.
+pub(crate) fn refresh_menu() {
+    #[cfg(not(windows))]
+    imp::refresh();
+}
+
 /// Mode row state for the menu's radio marks.
 pub(super) fn current_menu_state() -> (u8, bool, bool) {
     let cfg = crate::system::config::load_config();

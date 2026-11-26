@@ -241,15 +241,21 @@ pub mod linux {
     const MB_DRDY: u8 = 1 << 7;
     /// The firmware polls for 20 × 50 ms; matching that ceiling costs nothing on
     /// a healthy EC and covers a busy one.
-    const MB_POLL_CYCLES: usize = 20;
-    const MB_POLL_DELAY: Duration = Duration::from_millis(5);
+    // The EC answers a mailbox transaction in a few milliseconds; polling every
+    // 2 ms with a matching cycle budget keeps the worst case at 100 ms while a
+    // 100-entry fan table write drops from ~2.3 s to well under 1 s.
+    const MB_POLL_CYCLES: usize = 50;
+    const MB_POLL_DELAY: Duration = Duration::from_millis(2);
     /// `\proc\acpi\call` (the `acpi_call` module) evaluates an AML method as root.
     /// It is the only userspace path that runs the mailbox under the firmware
     /// mutex, so it cannot interleave with the kernel's battery/thermal polling.
     const AML_NODE: &str = "/proc/acpi/call";
     const AML_METHOD: &str = "\\_SB.AMW0.WMBC 0x0a 0x04";
     const AML_READ: u8 = 0x01;
-    const AML_WRITE: u8 = 0x02;
+    /// Writing RAM is the *zero* selector: `SAC1 == Zero` branches to WKBC.
+    /// 0x02 is the EC command channel (SCMD), which only moved the address byte
+    /// into CMDL and left the RAM untouched.
+    const AML_WRITE: u8 = 0x00;
 
     // ACPI EC interface (ACPI 6.x §12.2): data port 0x62, command/status 0x66.
     const PORT_DATA: u16 = 0x62;
@@ -351,6 +357,16 @@ pub mod linux {
         }
     }
 
+    /// Whether the port path may be attempted at all. Distributions do not set
+    /// this; the privileged broker does, because on this hardware the EC belongs
+    /// to the firmware and only the mailbox can talk to it.
+    fn ports_enabled() -> bool {
+        !matches!(
+            std::env::var_os("OPENREVO_EC_NO_PORTS"),
+            Some(value) if value != "0"
+        )
+    }
+
     /// Whether userspace may drive the ACPI EC ports. Probed once: `ioperm` has
     /// no cheap undo and a denial is stable for the process lifetime.
     #[cfg(target_arch = "x86_64")]
@@ -395,7 +411,7 @@ pub mod linux {
     /// Read one byte through an ACPI EC transaction (any bank).
     #[cfg(target_arch = "x86_64")]
     fn port_read(addr: u16) -> Option<u8> {
-        if !port_access_granted() {
+        if !ports_enabled() || !port_access_granted() {
             return None;
         }
         let _guard = PORT_LOCK.lock().ok()?;
@@ -422,7 +438,7 @@ pub mod linux {
     /// Write one byte through an ACPI EC transaction (any bank).
     #[cfg(target_arch = "x86_64")]
     fn port_write(addr: u16, val: u8) -> bool {
-        if !port_access_granted() {
+        if !ports_enabled() || !port_access_granted() {
             return false;
         }
         let Ok(_guard) = PORT_LOCK.lock() else {
@@ -447,6 +463,15 @@ pub mod linux {
             ports::outb(val, PORT_DATA);
             if !wait_status(STATUS_IBF, false) {
                 return false;
+            }
+        }
+        // A clean IBF says nothing about whether the EC kept the byte: on a
+        // firmware-owned EC every port write "succeeds" and lands nowhere. Read it
+        // back through the mailbox before claiming success.
+        if aml_available() {
+            match aml_call(AML_READ, addr, 0) {
+                Some((lo, _)) if lo == val => {}
+                _ => return false,
             }
         }
         std::thread::sleep(WRITE_SETTLE);
@@ -595,7 +620,7 @@ pub mod linux {
         node_set_byte(MB_CMDL, val);
         node_set_byte(MB_CMDH, 0);
         node_set_byte(MB_FLAGS, read_flags() | MB_WFLG);
-        std::thread::sleep(MB_POLL_DELAY * 2);
+        std::thread::sleep(MB_POLL_DELAY);
         let mut done = false;
         for _ in 0..MB_POLL_CYCLES {
             std::thread::sleep(MB_POLL_DELAY);
@@ -609,25 +634,30 @@ pub mod linux {
     }
 
     fn mailbox_read(addr: u16) -> Option<u8> {
+        // Drive the mailbox through the debugfs window first: the same register
+        // transaction costs ~7 ms from here against ~52 ms through acpi_call,
+        // because the firmware's own poll loop in `RKBC` sleeps 50 ms per
+        // iteration. acpi_call stays as the fallback for kernels without
+        // ec_sys (or without write_support=1).
+        if node().is_some() {
+            if let Some(v) = mailbox_via_node(addr) {
+                return Some(v);
+            }
+        }
         if aml_available() {
             if let Some((lo, _)) = aml_call(AML_READ, addr, 0) {
                 return Some(lo);
             }
         }
-        if node().is_some() {
-            return mailbox_via_node(addr);
-        }
         None
     }
 
     fn mailbox_write(addr: u16, val: u8) -> bool {
-        if aml_available() {
-            if aml_call(AML_WRITE, addr, val).is_some() {
-                return true;
-            }
+        if node().is_some() && mailbox_write_via_node(addr, val) {
+            return true;
         }
-        if node().is_some() {
-            return mailbox_write_via_node(addr, val);
+        if aml_available() {
+            return aml_call(AML_WRITE, addr, val).is_some();
         }
         false
     }
@@ -653,15 +683,22 @@ pub mod linux {
         for (i, slot) in probe.iter_mut().enumerate() {
             *slot = node_byte(i as u64).unwrap_or(u8::MAX);
         }
-        if aml_available() {
+        // Compare through the mailbox itself when the node answers: a candidate
+        // page costs 3 fast transactions instead of 3 x 52 ms over acpi_call.
+        let sample = |addr: u16| -> Option<u8> {
+            match mailbox_via_node(addr) {
+                Some(v) => Some(v),
+                None if aml_available() => aml_call(AML_READ, addr, 0).map(|(lo, _)| lo),
+                None => None,
+            }
+        };
+        if aml_available() || mailbox_via_node(0) != None {
             for page in [0x04u16].into_iter().chain(0x00..0x100) {
                 let base = page << 8;
-                if aml_call(AML_READ, base, 0).is_none() {
+                if sample(base).is_none() {
                     continue;
                 }
-                let matched = (0..probe.len()).all(|i| {
-                    aml_call(AML_READ, base + i as u16, 0).map(|(lo, _)| lo) == Some(probe[i])
-                });
+                let matched = (0..probe.len()).all(|i| sample(base + i as u16) == Some(probe[i]));
                 if matched {
                     NODE_PAGE.store(page as u8, Ordering::Release);
                     return Some(page as u8);
@@ -813,19 +850,34 @@ pub mod linux {
     }
 
     pub fn write(addr: u16, val: u8) -> bool {
+        let trace = std::env::var_os("OPENREVO_EC_TRACE").is_some();
         if via_node(addr) && FLAT_WRITABLE.load(Ordering::Acquire) {
             if node_set_byte((addr & 0xFF) as u64, val) {
+                if trace {
+                    log_warn!("PAL-EC", "write {:#06x} via node", addr);
+                }
                 std::thread::sleep(WRITE_SETTLE);
                 return true;
             }
+            if trace {
+                log_warn!("PAL-EC", "write {:#06x}: node path refused", addr);
+            }
+        } else if trace {
+            log_warn!("PAL-EC", "write {:#06x}: node path unavailable (page {:?}, flat writable {})", addr, node_alias_page(), FLAT_WRITABLE.load(Ordering::Acquire));
         }
         if broker_write(&[(addr, val)]) {
             std::thread::sleep(WRITE_SETTLE);
             return true;
         }
         if mailbox_write(addr, val) {
+            if trace {
+                log_warn!("PAL-EC", "write {:#06x} via mailbox", addr);
+            }
             std::thread::sleep(WRITE_SETTLE);
             return true;
+        }
+        if trace {
+            log_warn!("PAL-EC", "write {:#06x}: mailbox refused, port access granted = {}", addr, port_access_granted());
         }
         if port_write(addr, val) {
             return true;
@@ -900,6 +952,20 @@ pub mod linux {
     /// Batch write with per-byte settling. Falls back to a single privileged
     /// call for the whole batch rather than one prompt per byte.
     pub fn batch_write(entries: &[(u16, u8)]) -> bool {
+        // Fan tables are ~100 register writes; pushing them one round trip at a
+        // time costs 100 sockets and 100 sequential EC transactions with no
+        // benefit. Send the whole run to the broker in chunks of its per-request
+        // limit instead.
+        if !entries.is_empty() && broker_available() {
+            const CHUNK: usize = 192;
+            if entries
+                .chunks(CHUNK)
+                .all(|chunk| broker_write(chunk))
+            {
+                std::thread::sleep(WRITE_SETTLE);
+                return true;
+            }
+        }
         let mut all_ok = true;
         for (addr, val) in entries {
             if !write(*addr, *val) {

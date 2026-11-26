@@ -71,7 +71,20 @@ pub fn ensure_slint_main_process(app: Option<&AppHandle>) {
                         "mini" => false,
                         _ => cfg.last_window_expanded,
                     };
-                    let (init_pl1, init_tgp, init_power_text) = sync::get_current_power_targets(cfg.power_mode);
+                    // Hardware first: the EC is the only source that survives Fn keys,
+                    // the OEM console and the firmware's own scheduler.
+                    let hw = crate::system::hw_truth::read();
+                    let hw_power_mode = hw.power_mode.unwrap_or(cfg.power_mode);
+                    let hw_battery_limit = hw.battery_limit.unwrap_or(cfg.battery_limit);
+                    let hw_fan_boost = hw.fan_boost.unwrap_or(cfg.fan_boost);
+                    let hw_battery_mode = if hw_battery_limit >= 95 {
+                        "long_life"
+                    } else if hw_battery_limit <= 65 {
+                        "station"
+                    } else {
+                        "balance"
+                    };
+                    let (init_pl1, init_tgp, init_power_text) = sync::get_current_power_targets(hw_power_mode);
                     let gpu_caps = crate::driver::uefi_nvram::probe_gpu_capabilities();
                     let is_tri_mode = if gpu_caps.is_safety_locked {
                         gpu_caps.user_unlocked
@@ -81,14 +94,14 @@ pub fn ensure_slint_main_process(app: Option<&AppHandle>) {
                     let is_intel = gpu_caps.platform != "amd";
                     let is_thin_and_light = crate::commands::power_cmd::is_thin_and_light_or_pure_igpu();
                     let effective_gpu_mode = if is_thin_and_light {
-                        "igpu"
+                        "igpu".to_string()
                     } else {
-                        &cfg.gpu_mode
+                        crate::commands::tuning_cmd::effective_gpu_mode()
                     };
                     let line = format!("{}\n", serde_json::json!({
                         "action": "sync_state",
                         "app_version": format!("v{}", env!("CARGO_PKG_VERSION")),
-                        "power_mode": cfg.power_mode,
+                        "power_mode": hw_power_mode,
                         "pl1_target": init_pl1,
                         "tgp_target": init_tgp,
                         "power_target_text": init_power_text,
@@ -97,17 +110,17 @@ pub fn ensure_slint_main_process(app: Option<&AppHandle>) {
                         "is_safety_locked": gpu_caps.is_safety_locked,
                         "is_intel": is_intel,
                         "igpu_lock_reason": gpu_caps.reason_igpu_unsupported.unwrap_or_default(),
-                        "refresh_rate": cfg.refresh_rate,
+                        "refresh_rate": crate::system::display::get_refresh_rate(),
                         "auto_min_hz": cfg.auto_min_refresh_on_battery,
                         "brightness": crate::system::display::get_brightness().unwrap_or(76),
-                        "battery_limit": cfg.battery_limit,
+                        "battery_limit": hw_battery_limit,
                         "battery_percent": live_percent,
                         "is_ac_online": live_ac,
                         "is_dc_online": crate::commands::power_cmd::is_dc_round_plugged_in(),
                         "is_thin_and_light": is_thin_and_light,
-                        "battery_mode": if cfg.battery_limit >= 95 { "long_life" } else if cfg.battery_limit <= 65 { "station" } else { "balance" },
+                        "battery_mode": hw_battery_mode,
                         "usb_charge_enabled": cfg.usb_charge_enabled,
-                        "ac_recovery_enabled": cfg.ac_recovery_enabled,
+                        "ac_recovery_enabled": hw.ac_recovery.unwrap_or(cfg.ac_recovery_enabled),
                         "high_perf_scheme": cfg.high_perf_scheme,
                         "sleep_guard_enabled": cfg.sleep_guard_enabled,
                         "sleep_disconnect_net": cfg.sleep_disconnect_net,
@@ -117,7 +130,7 @@ pub fn ensure_slint_main_process(app: Option<&AppHandle>) {
                         "sleep_deep_sleep": cfg.sleep_deep_sleep,
                         "sleep_hibernate_30m": cfg.sleep_hibernate_30m,
                         "sleep_auto_office": cfg.sleep_auto_office,
-                        "fan_boost": cfg.fan_boost,
+                        "fan_boost": hw_fan_boost,
                         "camera_enabled": switches.camera,
                         "mic_enabled": switches.mic,
                         "win_locked": cfg.win_key_locked,

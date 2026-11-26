@@ -266,17 +266,17 @@ pub fn update_osd_position(app: &AppHandle, position_str: &str) {
 pub fn wake_osd_if_enabled(app: &AppHandle) {
     let cfg = crate::system::config::load_config();
     if cfg.osd_enabled && cfg.use_classic_webview {
-        present_osd_window(app);
+        present_osd_window(Some(app));
     }
 }
 
-pub fn present_osd_window(app: &AppHandle) {
+pub fn present_osd_window(app: Option<&AppHandle>) {
     let cfg = crate::system::config::load_config();
     if !cfg.use_classic_webview {
         send_osd_ipc_message(serde_json::json!({
             "action": "preview",
         }));
-    } else if let Some(win) = app.get_webview_window("osd") {
+    } else if let Some(win) = app.and_then(|app| app.get_webview_window("osd")) {
         #[cfg(windows)]
         unsafe {
             use windows::Win32::Foundation::HWND;
@@ -298,7 +298,7 @@ pub fn present_osd_window(app: &AppHandle) {
             }
         }
         let _ = win.set_ignore_cursor_events(true);
-    } else {
+    } else if app.is_some() {
         crate::system::webview_orchestrator::WebviewOrchestrator::global().enqueue_osd();
     }
 }
@@ -365,7 +365,7 @@ pub fn show_keyboard_sleep_timeout(seconds: u32) {
 
 #[tauri::command]
 pub fn show_osd_window(app: AppHandle) {
-    present_osd_window(&app);
+    present_osd_window(Some(&app));
 }
 
 #[tauri::command]
@@ -450,7 +450,7 @@ fn handle_set_osd(
     } else {
         update_osd_position(app, &new_position);
         if new_enabled {
-            present_osd_window(app);
+            present_osd_window(Some(app));
         }
     }
 
@@ -513,7 +513,7 @@ pub fn trigger_osd_preview(app: AppHandle) -> Result<(), String> {
         }));
     } else {
         update_osd_position(&app, &cfg.osd_position);
-        present_osd_window(&app);
+        present_osd_window(Some(&app));
     }
 
     let payload = serde_json::json!({

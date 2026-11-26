@@ -14,6 +14,7 @@ pub use power_events as power_listener;
 pub mod power_mode;
 pub mod power;
 pub mod logger;
+pub mod hw_truth;
 pub mod hardware_probe;
 pub mod model_engine;
 pub mod osd_window;

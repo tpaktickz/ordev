@@ -247,23 +247,116 @@ fn rfkill_set(kind: &str, enable: bool) -> bool {
     found
 }
 
+/// BlueZ is the session-facing radio switch: it needs no CAP_NET_ADMIN and works
+/// exactly like the desktop's own Bluetooth toggle. rfkill stays as the fallback for
+/// machines without bluetoothd.
+#[cfg(not(windows))]
+pub fn bluez_debug() -> (Option<String>, Option<bool>) {
+    (bluez_adapter_path(), bluez_powered())
+}
+
+/// `/sys/class/bluetooth/hciN` maps one-to-one onto `/org/bluez/hciN`, so the adapter
+/// path needs no ObjectManager round-trip (whose `a{oa{sa{sv}}}` reply cannot be
+/// deserialized into owned values through zbus' generic dict mapping).
+#[cfg(not(windows))]
+fn bluez_adapter_path() -> Option<String> {
+    let entries = std::fs::read_dir("/sys/class/bluetooth").ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with("hci") {
+            return Some(format!("/org/bluez/{name}"));
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+fn bluez_set_powered(enable: bool) -> bool {
+    let Some(path) = bluez_adapter_path() else {
+        return false;
+    };
+    let Ok(conn) = zbus::blocking::Connection::system() else {
+        return false;
+    };
+    let value = zbus::zvariant::Value::from(enable);
+    conn.call_method(
+        Some("org.bluez"),
+        path.as_str(),
+        Some("org.freedesktop.DBus.Properties"),
+        "Set",
+        &("org.bluez.Adapter1", "Powered", value),
+    )
+    .is_ok()
+}
+
+#[cfg(not(windows))]
+fn bluez_powered() -> Option<bool> {
+    let path = bluez_adapter_path()?;
+    let conn = zbus::blocking::Connection::system().ok()?;
+    let reply = conn
+        .call_method(
+            Some("org.bluez"),
+            path.as_str(),
+            Some("org.freedesktop.DBus.Properties"),
+            "Get",
+            &("org.bluez.Adapter1", "Powered"),
+        )
+        .ok()?;
+    let body = reply.body();
+    let value: zbus::zvariant::OwnedValue = body.deserialize().ok()?;
+    bool::try_from(value).ok()
+}
+
 #[cfg(not(windows))]
 pub fn get_native_bluetooth_radio_state() -> Option<bool> {
-    rfkill_state("bluetooth")
+    bluez_powered().or_else(|| rfkill_state("bluetooth"))
 }
 
 #[cfg(not(windows))]
 pub fn set_native_bluetooth_radio_state(enable: bool) -> bool {
+    if bluez_set_powered(enable) {
+        return true;
+    }
     rfkill_set("bluetooth", enable)
+}
+
+/// NetworkManager already owns the interface admin state and lets the active
+/// session flip it through polkit without a password prompt; rfkill is the fallback.
+#[cfg(not(windows))]
+fn nmcli_radio(kind: &str, enable: Option<bool>) -> Option<String> {
+    let mut cmd = crate::pal::process::command("nmcli");
+    match enable {
+        Some(state) => {
+            cmd.args(["radio", kind, if state { "on" } else { "off" }]);
+            let out = cmd.output().ok()?;
+            out.status.success().then(|| String::new())
+        }
+        None => {
+            cmd.args(["radio", kind]);
+            let out = cmd.output().ok()?;
+            if !out.status.success() {
+                return None;
+            }
+            Some(String::from_utf8_lossy(&out.stdout).trim().to_lowercase())
+        }
+    }
 }
 
 #[cfg(not(windows))]
 pub fn get_wifi_radio_state_native() -> Option<bool> {
-    rfkill_state("wlan")
+    match nmcli_radio("wifi", None) {
+        Some(text) if text.contains("enabled") => Some(true),
+        Some(text) if text.contains("disabled") => Some(false),
+        _ => rfkill_state("wlan"),
+    }
 }
 
 #[cfg(not(windows))]
 pub fn set_wifi_radio_state_native(enable: bool) -> bool {
+    if nmcli_radio("wifi", Some(enable)).is_some() {
+        crate::log_info!("DEVICE_SWITCH", "Wi-Fi radio set to {} via NetworkManager", enable);
+        return true;
+    }
     rfkill_set("wlan", enable)
 }
 

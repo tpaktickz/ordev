@@ -1013,6 +1013,13 @@ pub fn run_osd_standalone() {
         }
     };
 
+    // Same identity as the panel process: without it a fallback X11 toplevel
+    // OSD would show a generic taskbar icon.
+    #[cfg(target_os = "linux")]
+    {
+        let _ = slint::set_xdg_app_id("org.openrevo.OpenRevo");
+    }
+
     let osd_weak = osd.as_weak();
     let hwnd_holder = Arc::new(Mutex::new(None));
     let cfg_shared = Arc::new(Mutex::new(NativeOsdConfig::default()));

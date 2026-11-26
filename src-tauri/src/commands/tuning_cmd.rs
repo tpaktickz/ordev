@@ -92,6 +92,13 @@ pub fn get_gpu_mode_info_internal(
     }
 }
 
+/// Hardware-truth GPU mode for UI sync paths, which used to echo the persisted
+/// `config.gpu_mode` back at the panel even after the machine MUX changed.
+pub fn effective_gpu_mode() -> String {
+    let bridge = crate::driver::gpu_bridge::get_global_gpu();
+    get_gpu_mode_info_internal(&bridge).current_mode
+}
+
 #[tauri::command]
 pub fn get_gpu_mode_info(
     gpu_state: State<'_, SharedGpuBridge>,

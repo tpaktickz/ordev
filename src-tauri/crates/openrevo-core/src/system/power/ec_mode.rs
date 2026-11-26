@@ -78,6 +78,7 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
         }
     }
 
+    let phase_ap = std::time::Instant::now();
     let _is_amd = crate::system::cpu_monitor::is_amd_cpu();
     let _factory_tcc = wmi_ec::wmi_read_ec(wmi_ec::ADDR_TURBO_TCC).unwrap_or(0);
 
@@ -147,6 +148,7 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TRIGGER_BYTE, (cur_trig & 0x10) | 0x28);
             // 3. Mark silent mode status
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TURBO_TRIGGER, 1);
+            crate::log_info!("POWER_MODE", "phase: mode index + trigger written ({} ms)", phase_ap.elapsed().as_millis());
 
             // 4. Dynamic/Configured CPU Power Limits:
             // GROUND TRUTH RULE: If user has NOT set custom user_presets, DO NOT write power limit registers!
@@ -204,6 +206,7 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             if !crate::hal::is_legacy_pascal_turing_tongfang() {
                 apply_mode_fan_table(1);
             }
+            crate::log_info!("POWER_MODE", "phase: fan table done ({} ms)", phase_ap.elapsed().as_millis());
         }
         2 => {
             // --- Balance / Gaming Mode (Blue LED) ---
@@ -227,6 +230,7 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TRIGGER_BYTE, (cur_trig & 0x10) | 0x20);
             // 3. Clear silent mode status
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TURBO_TRIGGER, 0);
+            crate::log_info!("POWER_MODE", "phase: mode index + trigger written ({} ms)", phase_ap.elapsed().as_millis());
 
             // 4. Dynamic/Configured CPU Power Limits:
             // GROUND TRUTH RULE: If user has NOT set custom user_presets, DO NOT write power limit registers!
@@ -317,6 +321,7 @@ pub fn apply_ec_hardware_mode(ui_mode: u8) {
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TRIGGER_BYTE, (cur_trig & 0x10) | 0x20);
             // 3. Clear silent mode status
             wmi_ec::wmi_write_ec(wmi_ec::ADDR_TURBO_TRIGGER, 0);
+            crate::log_info!("POWER_MODE", "phase: mode index + trigger written ({} ms)", phase_ap.elapsed().as_millis());
 
             // 4. Dynamic/Configured CPU Power Limits:
             // GROUND TRUTH RULE: If user has NOT set custom user_presets, DO NOT write power limit registers!

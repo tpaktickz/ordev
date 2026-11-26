@@ -73,7 +73,7 @@ The helper binary installs to `/usr/lib/openrevo/openrevo-ec-helper` in all thre
 packages rather than `%{_libdir}`, because the polkit action pins that absolute
 path in `com.openrevo.ecwrite.policy` and the caller hardcodes it.
 
-`packaging/linux/openrevo.desktop` is the single desktop entry for all three;
+`packaging/linux/org.openrevo.OpenRevo.desktop` is the single desktop entry for all three;
 only its installed name differs.
 
 ## Permissions

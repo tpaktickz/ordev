@@ -279,7 +279,14 @@ pub fn apply_fan_table_to_ec(table: &FanTableData) {
     entries.push((wmi_ec::ADDR_RAMFAN_GPU_MAX_THRESHOLD2, max_gpu));
     entries.push((wmi_ec::ADDR_RAMFAN_TABLE_CTRL, ctrl_val));
 
+    let batch_started = std::time::Instant::now();
     wmi_ec::wmi_write_ec_batch(&entries);
+    crate::log_info!(
+        "POWER_MODE",
+        "fan table: {} entries written in {} ms",
+        entries.len(),
+        batch_started.elapsed().as_millis()
+    );
 
     // Step C: Post-latch Commit: Register ADDR_FAN_TABLE_LATCH = 0x04!
     // Ground-truth reverse engineered from official GCUService:

@@ -112,7 +112,7 @@ fn main() {
 /// bytes; anything larger is either a bug or an attempt to use this helper as a
 /// general purpose port writer.
 #[cfg(target_os = "linux")]
-const MAX_OPS: usize = 64;
+const MAX_OPS: usize = 192;
 
 #[cfg(target_os = "linux")]
 fn parse_addr(s: &str) -> Option<u16> {

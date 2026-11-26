@@ -98,6 +98,7 @@ impl EcBridge {
             ];
 
             loop {
+                let cycle_start = Instant::now();
                 if !wmi_ec::is_acpi_driver_available() && !crate::hal::platform_probe::is_tongfang_family() {
                     let hal = crate::hal::get_hardware_driver();
                     if hal.kind() != crate::hal::DriverKind::TongfangAcpi && hal.is_hardware_supported() {
@@ -246,7 +247,14 @@ impl EcBridge {
                     }
                 }
 
-                thread::sleep(Duration::from_millis(2000));
+                // One cycle costs ~8 ms over the ec_sys page but ~420 ms when
+                // every register has to go through the 52 ms firmware mailbox.
+                // Sleep until the next 1 s tick, never below 200 ms, so the
+                // cadence stays responsive without pinning a core on the slow
+                // channel.
+                let spent = cycle_start.elapsed();
+                let target = Duration::from_millis(1000);
+                thread::sleep(target.saturating_sub(spent).max(Duration::from_millis(200)));
             }
         });
 
@@ -300,6 +308,16 @@ impl EcBridge {
 
     pub fn get_power_mode(&self) -> u8 {
         self.cache.lock().power_mode
+    }
+
+    /// Snapshot of the two fields a menu renders, off the blocking path.
+    ///
+    /// Returns `None` instead of waiting when the poller holds the cache: a
+    /// mailbox write is ~60 ms and a StatusNotifierItem that stalls that long
+    /// looks frozen in a desktop shell.
+    pub fn try_menu_state(&self) -> Option<(u8, bool)> {
+        let cache = self.cache.try_lock()?;
+        Some((cache.power_mode, cache.fan_boost))
     }
 
     pub fn set_power_mode(&self, ui_mode: u8) {

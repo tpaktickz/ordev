@@ -153,7 +153,7 @@ pub fn init_hooks(app: Option<&AppHandle>) {
     if let Some(app) = app {
         let _ = APP.set(app.clone());
     }
-    crate::system::shortcuts::init_shortcuts();
+    crate::system::shortcuts::init_shortcuts(app);
 
     if STARTED.swap(true, Ordering::SeqCst) {
         return;

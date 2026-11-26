@@ -57,6 +57,8 @@ pub fn update_tray_window_mode(is_expanded: bool) {
         let _ = ctrl.full_panel.set_checked(is_expanded);
         let _ = ctrl.mini_drawer.set_checked(!is_expanded);
     }
+    #[cfg(not(windows))]
+    crate::system::win32_tray::refresh_menu();
 }
 
 /// Updates the tray power mode radio checkmarks.
@@ -67,6 +69,8 @@ pub fn update_tray_power_mode(mode: u8) {
         let _ = ctrl.beast.set_checked(mode == 3);
         let _ = ctrl.custom.set_checked(mode == 4);
     }
+    #[cfg(not(windows))]
+    crate::system::win32_tray::refresh_menu();
 }
 
 /// Updates the tray fan boost checkmark state.
@@ -74,6 +78,8 @@ pub fn update_tray_fan_boost(enabled: bool) {
     if let Some(ctrl) = TRAY_MENU_CONTROLS.get() {
         let _ = ctrl.fan_boost.set_checked(enabled);
     }
+    #[cfg(not(windows))]
+    crate::system::win32_tray::refresh_menu();
 }
 
 /// Hook for future autostart tray checkmark synchronization.

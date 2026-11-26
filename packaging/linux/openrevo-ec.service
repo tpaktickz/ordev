@@ -7,6 +7,9 @@ After=systemd-modules-load.service
 Wants=systemd-modules-load.service
 
 [Service]
+# The firmware owns this machine's EC, so the raw I/O port path is off: it never
+# lands and can fault when the kernel has already claimed the ports.
+Environment=OPENREVO_EC_NO_PORTS=1
 Type=simple
 # Root for the EC channels; the group is what the socket ends up owned by, so no
 # chown (and no CAP_CHOWN) is needed.

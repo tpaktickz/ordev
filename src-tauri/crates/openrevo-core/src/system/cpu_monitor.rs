@@ -89,9 +89,16 @@ pub struct CpuMonitor {
 
 impl CpuMonitor {
     pub fn new() -> Arc<Self> {
+        // Linux reports its own base clock from cpufreq; the hardcoded value is
+        // only a placeholder for the platforms that query it later.
+        #[cfg(target_os = "linux")]
+        let base_mhz = linux_cpu_max_mhz().unwrap_or(2200);
+        #[cfg(not(target_os = "linux"))]
+        let base_mhz = 2200;
+
         let monitor = Arc::new(Self {
-            current_mhz: AtomicU32::new(2200),
-            base_mhz: AtomicU32::new(2200),
+            current_mhz: AtomicU32::new(base_mhz),
+            base_mhz: AtomicU32::new(base_mhz),
             usage_pct: AtomicU32::new(5),
             cpu_temp: AtomicI32::new(50),
             power_dw: AtomicU32::new(0),
@@ -185,7 +192,28 @@ impl CpuMonitor {
             let _num_cpus = num_cpus();
             let is_ultrabook = crate::hal::platform_probe::is_ultrabook();
 
+            // Linux keeps its own delta baseline for /proc/stat.
+            #[cfg(target_os = "linux")]
+            let mut linux_prev: Option<(u64, u64)> = None;
+
             loop {
+                #[cfg(target_os = "linux")]
+                {
+                    // The Windows branch below is compiled out on this target;
+                    // without these three reads every value the UI shows stays
+                    // at its constructor default (2200 MHz, 50 degrees).
+                    if let Some((usage, total, idle)) = linux_cpu_usage_sample(&mut linux_prev) {
+                        monitor_clone.usage_pct.store(usage.min(100), Ordering::SeqCst);
+                        let _ = (total, idle);
+                    }
+                    if let Some(mhz) = linux_cpu_current_mhz() {
+                        monitor_clone.current_mhz.store(mhz, Ordering::SeqCst);
+                    }
+                    if let Some(temp) = linux_cpu_temp_celsius() {
+                        monitor_clone.cpu_temp.store(temp, Ordering::SeqCst);
+                    }
+                }
+
                 if is_ultrabook && !crate::system::telemetry::is_telemetry_active() {
                     // Ultrabook background suspension: zero CPU / PDH polling when OpenRevo is not in foreground!
                     thread::sleep(Duration::from_millis(3000));
@@ -660,6 +688,141 @@ fn filetime_to_u64(ft: &FILETIME) -> u64 {
 
 fn num_cpus() -> usize {
     std::thread::available_parallelism().map(|n| n.get()).unwrap_or(24)
+}
+
+/// Aggregate `cpu` line of /proc/stat into a busy percentage between two calls.
+/// Returns (usage_percent, total_ticks, idle_ticks); the first call only seeds
+/// the baseline and reports nothing.
+#[cfg(target_os = "linux")]
+fn linux_cpu_usage_sample(prev: &mut Option<(u64, u64)>) -> Option<(u32, u64, u64)> {
+    let stat = std::fs::read_to_string("/proc/stat").ok()?;
+    let line = stat.lines().next()?;
+    let mut fields = line.split_whitespace();
+    if fields.next()? != "cpu" {
+        return None;
+    }
+    let ticks: Vec<u64> = fields.filter_map(|f| f.parse::<u64>().ok()).collect();
+    if ticks.len() < 4 {
+        return None;
+    }
+    // user nice system idle iowait irq softirq steal
+    let idle = ticks[3] + ticks.get(4).copied().unwrap_or(0);
+    let total: u64 = ticks.iter().take(8).sum();
+    match *prev {
+        Some((prev_total, prev_idle)) => {
+            *prev = Some((total, idle));
+            let total_diff = total.saturating_sub(prev_total);
+            let idle_diff = idle.saturating_sub(prev_idle);
+            if total_diff == 0 {
+                return None;
+            }
+            let busy = (total_diff.saturating_sub(idle_diff)) as f64 / total_diff as f64;
+            Some(((busy * 100.0).round() as u32, total, idle))
+        }
+        None => {
+            *prev = Some((total, idle));
+            None
+        }
+    }
+}
+
+/// Hottest core clock from cpufreq, in MHz. `/proc/cpuinfo` is the fallback for
+/// kernels built without cpufreq (and for the moment before the driver binds).
+#[cfg(target_os = "linux")]
+fn linux_cpu_current_mhz() -> Option<u32> {
+    let mut best = 0u32;
+    if let Ok(entries) = std::fs::read_dir("/sys/devices/system/cpu") {
+        for entry in entries.flatten() {
+            let name = entry.file_name();
+            let Some(name) = name.to_str() else { continue };
+            if !name.starts_with("cpu") || name.len() <= 3 {
+                continue;
+            }
+            let path = entry.path().join("cpufreq/scaling_cur_freq");
+            if let Ok(raw) = std::fs::read_to_string(&path) {
+                if let Ok(khz) = raw.trim().parse::<u32>() {
+                    let mhz = khz / 1000;
+                    if mhz > best {
+                        best = mhz;
+                    }
+                }
+            }
+        }
+    }
+    if best > 0 {
+        return Some(best);
+    }
+    let info = std::fs::read_to_string("/proc/cpuinfo").ok()?;
+    let mut best = 0f64;
+    for line in info.lines() {
+        if let Some(rest) = line.strip_prefix("cpu MHz") {
+            if let Some(value) = rest.split(':').nth(1) {
+                if let Ok(mhz) = value.trim().parse::<f64>() {
+                    if mhz > best {
+                        best = mhz;
+                    }
+                }
+            }
+        }
+    }
+    if best > 0.0 {
+        Some(best.round() as u32)
+    } else {
+        None
+    }
+}
+
+/// Nominal maximum clock, used to size the "current vs max" bar.
+#[cfg(target_os = "linux")]
+fn linux_cpu_max_mhz() -> Option<u32> {
+    let raw = std::fs::read_to_string("/sys/devices/system/cpu/cpu0/cpufreq/cpuinfo_max_freq").ok()?;
+    let khz = raw.trim().parse::<u32>().ok()?;
+    Some(khz / 1000)
+}
+
+/// Package temperature from coretemp/k10temp/zenpower. `acpitz` is deliberately
+/// skipped: on these Tongfang boards it reports a firmware constant.
+#[cfg(target_os = "linux")]
+fn linux_cpu_temp_celsius() -> Option<i32> {
+    const PLAUSIBLE_MAX_MILLI: i32 = 200_000;
+    const MAX_CELSIUS: i32 = 125;
+
+    let mut hottest: Option<i32> = None;
+    let mut package: Option<i32> = None;
+    if let Ok(entries) = std::fs::read_dir("/sys/class/hwmon") {
+        for entry in entries.flatten() {
+            let dir = entry.path();
+            let Ok(name) = std::fs::read_to_string(dir.join("name")) else {
+                continue;
+            };
+            let name = name.trim();
+            if !matches!(name, "coretemp" | "k10temp" | "zenpower") {
+                continue;
+            }
+            for index in 0..16 {
+                let Ok(raw) = std::fs::read_to_string(dir.join(format!("temp{index}_input"))) else {
+                    continue;
+                };
+                let Ok(milli) = raw.trim().parse::<i32>() else { continue };
+                if milli <= 0 || milli > PLAUSIBLE_MAX_MILLI {
+                    continue;
+                }
+                let celsius = milli / 1000;
+                if celsius <= 0 || celsius >= MAX_CELSIUS {
+                    continue;
+                }
+                if hottest.map_or(true, |h| celsius > h) {
+                    hottest = Some(celsius);
+                }
+                let label = std::fs::read_to_string(dir.join(format!("temp{index}_label")))
+                    .unwrap_or_default();
+                if label.trim() == "Package id 0" {
+                    package = Some(celsius);
+                }
+            }
+        }
+    }
+    package.or(hottest)
 }
 
 static GLOBAL_CPU_MONITOR: std::sync::OnceLock<Arc<CpuMonitor>> = std::sync::OnceLock::new();

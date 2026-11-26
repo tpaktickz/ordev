@@ -76,6 +76,6 @@ pub fn trigger_shortcut_action(
         swallow: false,
         plugin_id: None,
     };
-    crate::system::shortcuts::dispatcher::dispatch_action(app, dummy_binding);
+    crate::system::shortcuts::dispatcher::dispatch_action(Some(app), dummy_binding);
     Ok(())
 }

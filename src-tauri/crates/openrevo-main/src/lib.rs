@@ -34,6 +34,16 @@ pub fn run_main_standalone() {
         }
     };
 
+    // Wayland shells resolve the taskbar entry (and its icon) through the xdg
+    // app id, matched against `org.openrevo.OpenRevo.desktop`. It must be set after the
+    // component exists (the backend context) but before the window is shown.
+    #[cfg(target_os = "linux")]
+    {
+        if let Err(error) = slint::set_xdg_app_id("org.openrevo.OpenRevo") {
+            eprintln!("[OpenRevo Slint] xdg app id unavailable: {}", error);
+        }
+    }
+
     // Dynamically inject the package version from CARGO_PKG_VERSION at compile time
     window.set_app_version(format!("v{}", env!("CARGO_PKG_VERSION")).into());
 

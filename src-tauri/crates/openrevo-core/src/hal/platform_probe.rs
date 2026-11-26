@@ -35,35 +35,37 @@ pub fn get_chassis_architecture_tier() -> ChassisArchitectureTier {
             return ChassisArchitectureTier::DeclarativeOrUltrabook;
         }
 
-        #[cfg(windows)]
-        {
-            // Step 2: SPI Flash UEFI NVRAM & APVersion Ground Truth Arbitration
-            if let Ok(nv) = crate::driver::uefi_nvram::read_active_nvram() {
-                // Priority A: 50-Series (OemMagicVariable or ap_version >= 25)
-                if nv.var_name.starts_with("OemMagicVariable") || nv.is_50_series || nv.ap_version >= 25 {
-                    crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Next-Gen Blackwell (50-Series, ap_version={})", nv.ap_version);
-                    return ChassisArchitectureTier::NextGenBlackwell;
-                }
-
-                // Priority B: 40-Series (Modern payload >= 128 bytes and ap_version >= 23)
-                if nv.bytes_read >= 128 && nv.ap_version >= 23 {
-                    crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Modern Ada Lovelace (40-Series, ap_version={})", nv.ap_version);
-                    return ChassisArchitectureTier::ModernAda;
-                }
-
-                // Priority C: 30-Series (Modern payload >= 128 bytes and ap_version < 23)
-                if nv.bytes_read >= 128 && nv.ap_version < 23 {
-                    crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Dual-Mode Ampere (30-Series, payload={}B, ap_version={})", nv.bytes_read, nv.ap_version);
-                    return ChassisArchitectureTier::DualModeAmpere;
-                }
-
-                // Priority D: Pre-APVersion 10/16/20-Series (Legacy payload <= 64 bytes)
-                if nv.bytes_read <= 64 {
-                    crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Legacy Pascal/Turing (10/16/20-Series, payload={}B <= 64B)", nv.bytes_read);
-                    return ChassisArchitectureTier::LegacyPascalTuring;
-                }
+        // Step 2: SPI Flash UEFI NVRAM & APVersion Ground Truth Arbitration
+        // (efivars reads are driverless on both OSes, so this runs everywhere; only
+        // the MULong fallback below needs the Windows WMI provider.)
+        if let Ok(nv) = crate::driver::uefi_nvram::read_active_nvram() {
+            // Priority A: 50-Series (OemMagicVariable or ap_version >= 25)
+            if nv.var_name.starts_with("OemMagicVariable") || nv.is_50_series || nv.ap_version >= 25 {
+                crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Next-Gen Blackwell (50-Series, ap_version={})", nv.ap_version);
+                return ChassisArchitectureTier::NextGenBlackwell;
             }
 
+            // Priority B: 40-Series (Modern payload >= 128 bytes and ap_version >= 23)
+            if nv.bytes_read >= 128 && nv.ap_version >= 23 {
+                crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Modern Ada Lovelace (40-Series, ap_version={})", nv.ap_version);
+                return ChassisArchitectureTier::ModernAda;
+            }
+
+            // Priority C: 30-Series (Modern payload >= 128 bytes and ap_version < 23)
+            if nv.bytes_read >= 128 && nv.ap_version < 23 {
+                crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Dual-Mode Ampere (30-Series, payload={}B, ap_version={})", nv.bytes_read, nv.ap_version);
+                return ChassisArchitectureTier::DualModeAmpere;
+            }
+
+            // Priority D: Pre-APVersion 10/16/20-Series (Legacy payload <= 64 bytes)
+            if nv.bytes_read <= 64 {
+                crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Legacy Pascal/Turing (10/16/20-Series, payload={}B <= 64B)", nv.bytes_read);
+                return ChassisArchitectureTier::LegacyPascalTuring;
+            }
+        }
+
+        #[cfg(windows)]
+        {
             // Priority E: Completely missing NVRAM on discrete GPU platform
             if crate::driver::wmi_mulong::is_mulong_available() {
                 crate::log_info!("PLATFORM_PROBE", "Chassis Tier signed: Legacy Pascal/Turing via MULong (No NVRAM)");

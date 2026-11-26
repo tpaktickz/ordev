@@ -160,15 +160,38 @@ pub fn get_cpu_frequency_info() -> Option<(u32, u32, u32)> {
 
 static POWER_MODE_LOCK: std::sync::Mutex<Option<(u8, std::time::Instant)>> = std::sync::Mutex::new(None);
 
+/// Monotonic request counter. A request that is superseded while it waits for
+/// [`POWER_MODE_LOCK`] is dropped instead of applied: a full apply takes seconds
+/// (the fan table alone is ~96 EC transactions), so a queue of stale requests
+/// leaves the machine in a mode nobody asked for and makes switching feel slow.
+static APPLY_GEN: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// How long a completed apply counts as authoritative. Anything that re-sends
+/// the mode it already sits in inside this window is an echo, not a request.
+const SAME_MODE_ECHO_WINDOW: std::time::Duration = std::time::Duration::from_secs(5);
+
 /// Apply full-stack performance release mode across Windows Power Overlay, Power Plan, and Motherboard EC
 pub fn apply_full_power_mode(ui_mode: u8) {
+    use std::sync::atomic::Ordering;
+
+    let generation = APPLY_GEN.fetch_add(1, Ordering::SeqCst) + 1;
+
     let mut lock = match POWER_MODE_LOCK.lock() {
         Ok(guard) => guard,
         Err(poisoned) => poisoned.into_inner(),
     };
 
+    if APPLY_GEN.load(Ordering::SeqCst) != generation {
+        crate::log_info!(
+            "POWER_MODE",
+            "apply_full_power_mode for mode {} dropped: superseded by a newer request",
+            ui_mode
+        );
+        return;
+    }
+
     if let Some((last_mode, last_time)) = *lock {
-        if last_mode == ui_mode && last_time.elapsed() < std::time::Duration::from_millis(600) {
+        if last_mode == ui_mode && last_time.elapsed() < SAME_MODE_ECHO_WINDOW {
             crate::log_info!("POWER_MODE", "apply_full_power_mode for mode {} debounced (applied {:?} ago)", ui_mode, last_time.elapsed());
             return;
         }
@@ -176,12 +199,15 @@ pub fn apply_full_power_mode(ui_mode: u8) {
     *lock = Some((ui_mode, std::time::Instant::now()));
 
     crate::log_info!("POWER_MODE", "=== Apply Full Power Mode: UI Mode {} ===", ui_mode);
+    let started = std::time::Instant::now();
 
     // 1. Windows OS Energy Scheduler (Power Overlay Scheme)
     apply_windows_power_overlay(ui_mode);
+    let after_overlay = started.elapsed();
 
     // 2. Hardware EC RAM Registers (PL1 / PL2 / TGP / Fan Mode / APExist)
     apply_ec_hardware_mode(ui_mode);
+    let after_ec = started.elapsed();
 
     // 3. OEM Official Configuration Sync (MainOption.json & Mode4_Profile.json)
     sync_oem_main_option(ui_mode);
@@ -194,6 +220,16 @@ pub fn apply_full_power_mode(ui_mode: u8) {
             .unwrap_or(cfg.custom_profile);
         sync_oem_mode4_profile(&profile);
     }
+
+    crate::log_info!(
+        "POWER_MODE",
+        "Mode {} applied in {} ms (overlay {} ms, ec {} ms, oem_sync+profile {} ms)",
+        ui_mode,
+        started.elapsed().as_millis(),
+        after_overlay.as_millis(),
+        (after_ec - after_overlay).as_millis(),
+        (started.elapsed() - after_ec).as_millis()
+    );
 }
 
 /// Set Windows Power Overlay Scheme slider (Best Efficiency / Balanced / Best Performance)

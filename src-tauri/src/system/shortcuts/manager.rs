@@ -117,12 +117,14 @@ pub fn register_shortcut(binding: ShortcutBinding) -> bool {
         });
     });
 
+    #[cfg(target_os = "linux")]
+    sync_portal();
     true
 }
 
 /// Unregister a shortcut by its ID
 pub fn unregister_shortcut(id: &str) -> bool {
-    with_registry_mut(|registry| {
+    let removed = with_registry_mut(|registry| {
         if let Some(entry) = registry.entries.remove(id) {
             if let Some(ids) = registry.lookup.get_mut(&entry.parsed.vk_code) {
                 ids.retain(|x| x != id);
@@ -131,10 +133,21 @@ pub fn unregister_shortcut(id: &str) -> bool {
         } else {
             false
         }
-    })
+    });
+    #[cfg(target_os = "linux")]
+    if removed {
+        sync_portal();
+    }
+    removed
 }
 
 /// Retrieve all currently registered shortcuts
+/// Push the current registry state at the desktop portal (Linux only).
+#[cfg(target_os = "linux")]
+pub fn sync_portal() {
+    super::portal::rebind(get_all_shortcuts());
+}
+
 pub fn get_all_shortcuts() -> Vec<ShortcutBinding> {
     let guard = REGISTRY.read().unwrap();
     if let Some(ref registry) = *guard {
@@ -186,7 +199,7 @@ pub fn check_match_and_trigger(
 ) -> bool {
     let (binding, swallow) = match_shortcut(vk, is_ctrl, is_alt, is_shift, is_win);
     if let Some(binding) = binding {
-        dispatch_action(app.clone(), binding);
+        dispatch_action(Some(app.clone()), binding);
     }
     swallow
 }
@@ -199,6 +212,13 @@ fn match_shortcut(
     is_shift: bool,
     is_win: bool,
 ) -> (Option<ShortcutBinding>, bool) {
+    // The compositor already grabs these keys and swallows them; matching here too
+    // would fire every action twice.
+    #[cfg(target_os = "linux")]
+    if super::portal::active() {
+        return (None, false);
+    }
+
     // The Windows keyboard hook must not wait for a settings save or another key event.
     let Ok(guard) = REGISTRY.try_read() else {
         return (None, false);

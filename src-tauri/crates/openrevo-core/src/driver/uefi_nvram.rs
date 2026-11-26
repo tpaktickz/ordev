@@ -268,9 +268,58 @@ pub fn read_bios_advanced_menu_status() -> BiosMenuStatus {
 /// Read Hardware GPU Mode:
 /// Reads Offset 98 (OemDisplayMode) directly from SPI Flash NVRAM (OemMagicVariable or UniWillVariable).
 /// Resolves mode string using official DGgpuDirectConnectionMode enum table per CPU architecture.
+/// Which GPU actually drives the internal panel.
+///
+/// On a hybrid machine the eDP connector hangs off the iGPU (i915/xe/amdgpu); in
+/// dGPU-direct mode it hangs off the NVIDIA device. That is a harder fact than
+/// any firmware variable, which may be stale, unreadable without root, or stored
+/// at a platform-specific offset.
+#[cfg(target_os = "linux")]
+fn linux_mux_from_topology() -> Option<&'static str> {
+    let mut found: Option<&'static str> = None;
+    let entries = std::fs::read_dir("/sys/class/drm").ok()?;
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Some((_, connector)) = name.split_once('-') else {
+            continue;
+        };
+        if !(connector.starts_with("eDP") || connector.starts_with("LVDS")) {
+            continue;
+        }
+        let status = std::fs::read_to_string(entry.path().join("status")).unwrap_or_default();
+        if status.trim() != "connected" {
+            continue;
+        }
+        let driver = std::fs::read_link(entry.path().join("device/driver"))
+            .ok()
+            .and_then(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()))
+            .unwrap_or_default();
+        found = Some(if driver == "nvidia" || driver == "nvidia-drm" {
+            "dgpu"
+        } else {
+            "hybrid"
+        });
+        break;
+    }
+    found
+}
+
 pub fn read_gpu_mode() -> GpuModeHardwareStatus {
     let (cpu_name, is_amd) = get_cpu_info();
     let platform_str = if is_amd { "amd".to_string() } else { "intel".to_string() };
+
+    // 0a. Physical display routing beats every firmware hint on Linux.
+    #[cfg(target_os = "linux")]
+    if let Some(mode) = linux_mux_from_topology() {
+        return GpuModeHardwareStatus {
+            current_mode: mode.to_string(),
+            raw_value: if mode == "dgpu" { 1 } else { 0 },
+            platform: platform_str,
+            cpu_name,
+            hardware_read: true,
+            error: None,
+        };
+    }
 
     // 0. Declarative Driver Contract First (Level 0 Architecture - e.g. Baolongda Jiaolong 16 Pro)
     if let Some(manifest) = crate::hal::declarative::load_matched_manifest() {

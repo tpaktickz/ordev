@@ -83,6 +83,13 @@ pub fn get_realtime_touchpad_state(has_ec_switches: bool, fallback: bool) -> boo
         return enabled;
     }
 
+    // 1b. Linux: the compositor owns the actual input path; the EC bit only drives
+    //     the indicator LED and the firmware's own notion of the touchpad.
+    #[cfg(not(windows))]
+    if let Some(enabled) = kde_touchpad_state() {
+        return enabled;
+    }
+
     // 2. Hardware fallback: ADDR_BATTERY_PROTECTION_MODE TOUCHPAD_BITMASK
     if has_ec_switches {
         if let Some(val) = crate::driver::wmi_ec::wmi_read_ec(crate::driver::wmi_ec::ADDR_BATTERY_PROTECTION_MODE) {
@@ -208,6 +215,88 @@ pub fn write_ptp_registry_enabled(enabled: bool) {
         crate::driver::wmi_ec::TOUCHPAD_BITMASK,
         enabled,
     );
+}
+
+/// KWin owns the pointer devices on Wayland and exposes each one as
+/// `/org/kde/KWin/InputDevice/<eventN>` with a writable `enabled` property. That
+/// property is the only switch that actually stops touch input, so it leads and the
+/// EC bit merely follows to keep the firmware's LED/state in sync.
+#[cfg(not(windows))]
+fn kde_touchpad_paths() -> Vec<String> {
+    let mut paths = Vec::new();
+    let Ok(entries) = std::fs::read_dir("/sys/class/input") else {
+        return paths;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if !name.starts_with("event") {
+            continue;
+        }
+        let device = std::fs::read_to_string(entry.path().join("device/name")).unwrap_or_default();
+        let lowered = device.to_lowercase();
+        if !lowered.contains("touchpad") && !lowered.contains("touch pad") && !lowered.contains("trackpad") {
+            continue;
+        }
+        paths.push(format!("/org/kde/KWin/InputDevice/{name}"));
+    }
+    paths
+}
+
+#[cfg(not(windows))]
+pub fn kde_touchpad_state() -> Option<bool> {
+    let conn = zbus::blocking::Connection::session().ok()?;
+    for path in kde_touchpad_paths() {
+        let reply = conn
+            .call_method(
+                Some("org.kde.KWin"),
+                path.as_str(),
+                Some("org.freedesktop.DBus.Properties"),
+                "Get",
+                &("org.kde.KWin.InputDevice", "enabled"),
+            )
+            .ok()?;
+        let body = reply.body();
+        let value: zbus::zvariant::OwnedValue = body.deserialize().ok()?;
+        if let Ok(flag) = bool::try_from(value) {
+            return Some(flag);
+        }
+    }
+    None
+}
+
+#[cfg(not(windows))]
+pub fn kde_set_touchpad_enabled(enable: bool) -> bool {
+    let Ok(conn) = zbus::blocking::Connection::session() else {
+        return false;
+    };
+    let mut touched = false;
+    for path in kde_touchpad_paths() {
+        let value = zbus::zvariant::Value::from(enable);
+        let ok = conn
+            .call_method(
+                Some("org.kde.KWin"),
+                path.as_str(),
+                Some("org.freedesktop.DBus.Properties"),
+                "Set",
+                &("org.kde.KWin.InputDevice", "enabled", value),
+            )
+            .is_ok();
+        if ok {
+            crate::log_info!("DEVICE_SWITCH", "KWin touchpad {} -> enabled={}", path, enable);
+            touched = true;
+        }
+    }
+    touched
+}
+
+#[cfg(windows)]
+pub fn kde_touchpad_state() -> Option<bool> {
+    None
+}
+
+#[cfg(windows)]
+pub fn kde_set_touchpad_enabled(_enable: bool) -> bool {
+    false
 }
 
 #[cfg(not(windows))]

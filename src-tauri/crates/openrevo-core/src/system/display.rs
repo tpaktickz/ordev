@@ -73,17 +73,36 @@ mod imp {
             if total == 0 || hactive == 0 || vactive == 0 {
                 continue;
             }
-            let hz = ((pixclk * 1000) / total).max(1) as u32;
+            // pixclk is already in Hz (EDID stores 10 kHz units, scaled above).
+            let hz = (pixclk / total).max(1) as u32;
             out.push((hactive, vactive, hz));
         }
         out
     }
 
+    /// Decode the EDID manufacturer id (three packed 5-bit letters) plus the
+    /// product code, e.g. `BOE 0x0B4C`. The raw bytes are not ASCII: reading
+    /// them as text yields mojibake.
     fn vendor_of(edid: &[u8]) -> String {
-        if edid.len() < 10 {
+        if edid.len() < 12 {
             return String::new();
         }
-        String::from_utf8_lossy(&edid[8..10]).trim().to_string()
+        let mut letters = String::new();
+        let packed = u16::from_be_bytes([edid[8], edid[9]]);
+        for shift in [10u16, 5, 0] {
+            let value = (packed >> shift) & 0x1F;
+            letters.push(if (1..=26).contains(&value) {
+                (b'A' + value as u8 - 1) as char
+            } else {
+                '?'
+            });
+        }
+        let product = u16::from_le_bytes([edid[10], edid[11]]);
+        if letters.contains('?') {
+            format!("{product:#06x}")
+        } else {
+            format!("{letters} {product:#06x}")
+        }
     }
 
     fn probe_mode_info_uncached(device_name: &str) -> Option<ModeInfo> {
@@ -118,6 +137,7 @@ mod imp {
         let Ok(entries) = std::fs::read_dir("/sys/class/drm") else {
             return fallback_monitor();
         };
+        let active_modes = active_modes_from_compositor();
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
             if !name.contains('-') {
@@ -127,10 +147,22 @@ mod imp {
             if status.trim() != "connected" {
                 continue;
             }
-            let Some((width, height, current_hz, supported_rates)) = probe_mode_info(&name) else {
+            let Some((mut width, mut height, mut current_hz, mut supported_rates)) =
+                probe_mode_info(&name)
+            else {
                 continue;
             };
             let connector = connector_of(&name);
+            if let Some((w, h, hz, rates)) = active_modes.get(&connector) {
+                width = *w;
+                height = *h;
+                current_hz = *hz;
+                if !rates.is_empty() {
+                    let mut merged: BTreeSet<u32> = supported_rates.iter().copied().collect();
+                    merged.extend(rates.iter().copied());
+                    supported_rates = merged.into_iter().collect();
+                }
+            }
             let internal = connector.starts_with("eDP") || connector.starts_with("LVDS");
             let edid = std::fs::read(entry.path().join("edid")).unwrap_or_default();
             let vendor = vendor_of(&edid);
@@ -179,6 +211,109 @@ mod imp {
             .output()
             .map(|o| o.status.success())
             .unwrap_or(false)
+    }
+
+    fn run_tool_stdout(program: &str, args: &[&str]) -> Option<String> {
+        let out = crate::pal::process::command(program).args(args).output().ok()?;
+        if !out.status.success() {
+            return None;
+        }
+        Some(String::from_utf8_lossy(&out.stdout).into_owned())
+    }
+
+    /// Active mode per connector, as the compositor reports it.
+    ///
+    /// EDID only describes what the panel is *able* to do, and its first
+    /// detailed timing is the panel's preferred mode — a 240 Hz laptop panel
+    /// still advertises 60 Hz first. Reading the running mode from the session
+    /// (KDE `kscreen-doctor -j`, wlroots `wlr-randr --json`) is the only way to
+    /// know what is actually on screen.
+    fn active_modes_from_compositor() -> std::collections::HashMap<String, (u32, u32, u32, Vec<u32>)> {
+        use std::collections::HashMap;
+        let mut map: HashMap<String, (u32, u32, u32, Vec<u32>)> = HashMap::new();
+
+        if let Some(text) = run_tool_stdout("kscreen-doctor", &["-j"]) {
+            if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) {
+                if let Some(outputs) = doc.get("outputs").and_then(|o| o.as_array()) {
+                    for output in outputs {
+                        if !output.get("enabled").and_then(|v| v.as_bool()).unwrap_or(false) {
+                            continue;
+                        }
+                        let Some(name) = output.get("name").and_then(|v| v.as_str()) else {
+                            continue;
+                        };
+                        let Some(modes) = output.get("modes").and_then(|v| v.as_array()) else {
+                            continue;
+                        };
+                        let current_id = output.get("currentModeId").and_then(|v| v.as_str());
+                        let active = modes.iter().find(|m| {
+                            current_id.is_some() && m.get("id").and_then(|v| v.as_str()) == current_id
+                        });
+                        let size = active
+                            .and_then(|m| m.get("size"))
+                            .or_else(|| output.get("size"));
+                        let width = size
+                            .and_then(|s| s.get("width"))
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
+                        let height = size
+                            .and_then(|s| s.get("height"))
+                            .and_then(|v| v.as_u64())
+                            .unwrap_or(0) as u32;
+                        let hz = active
+                            .and_then(|m| m.get("refreshRate"))
+                            .and_then(|v| v.as_f64())
+                            .unwrap_or(0.0);
+                        if width == 0 || height == 0 {
+                            continue;
+                        }
+                        let mut rates: BTreeSet<u32> = BTreeSet::new();
+                        for mode in modes {
+                            if let Some(rate) = mode.get("refreshRate").and_then(|v| v.as_f64()) {
+                                let rounded = rate.round() as u32;
+                                if rounded > 1 {
+                                    rates.insert(rounded);
+                                }
+                            }
+                        }
+                        map.insert(
+                            name.to_string(),
+                            (width, height, hz.round() as u32, rates.into_iter().collect()),
+                        );
+                    }
+                }
+            }
+        }
+
+        if map.is_empty() {
+            if let Some(text) = run_tool_stdout("wlr-randr", &["--json"]) {
+                if let Ok(doc) = serde_json::from_str::<serde_json::Value>(&text) {
+                    if let Some(outputs) = doc.as_array() {
+                        for output in outputs {
+                            let Some(name) = output.get("name").and_then(|v| v.as_str()) else {
+                                continue;
+                            };
+                            let Some(current) = output.get("current_mode") else {
+                                continue;
+                            };
+                            let width = current.get("width").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let height = current.get("height").and_then(|v| v.as_u64()).unwrap_or(0) as u32;
+                            let hz = current
+                                .get("refresh")
+                                .and_then(|v| v.as_u64())
+                                .map(|millihz| (millihz as f64 / 1000.0).round() as u32)
+                                .unwrap_or(0);
+                            if width == 0 || height == 0 {
+                                continue;
+                            }
+                            map.insert(name.to_string(), (width, height, hz, Vec::new()));
+                        }
+                    }
+                }
+            }
+        }
+
+        map
     }
 
     pub fn set_monitor_refresh_rate(device_name: &str, hz: u32) -> Result<(), String> {
@@ -236,15 +371,110 @@ mod imp {
         primary().map(|m| m.supported_rates).unwrap_or_else(|| vec![60])
     }
 
+    /// Backlight devices, best-first. `intel_backlight`/`amdgpu_bl*` actually drive
+    /// the internal panel; `nvidia_0` (0..100, ACES-era) is a decoy that exists even
+    /// when the panel is muxed to the iGPU, and `read_dir` order is filesystem order.
+    fn backlight_dirs() -> Vec<std::path::PathBuf> {
+        let mut dirs: Vec<std::path::PathBuf> = std::fs::read_dir("/sys/class/backlight")
+            .map(|rd| rd.flatten().map(|e| e.path()).collect())
+            .unwrap_or_default();
+        dirs.sort_by_key(|p| {
+            let name = p.file_name().unwrap_or_default().to_string_lossy().to_string();
+            if name.starts_with("intel_backlight") {
+                0
+            } else if name.starts_with("amdgpu") {
+                1
+            } else if name.starts_with("nvidia") {
+                3
+            } else {
+                2
+            }
+        });
+        dirs
+    }
+
     fn backlight_dir() -> Option<std::path::PathBuf> {
-        std::fs::read_dir("/sys/class/backlight")
-            .ok()?
-            .flatten()
-            .map(|e| e.path())
-            .next()
+        backlight_dirs().into_iter().next()
+    }
+
+    // --- Session-bus brightness (the only path that works unprivileged on Wayland) ---
+
+    const BRIGHTNESS_DEST: &str = "org.kde.ScreenBrightness";
+    const BRIGHTNESS_ROOT: &str = "/org/kde/ScreenBrightness";
+
+    /// Resolve the session-bus object that owns the *internal* panel backlight.
+    fn brightness_object() -> Option<(zbus::blocking::Connection, zbus::blocking::Proxy<'static>)> {
+        let conn = zbus::blocking::Connection::session().ok()?;
+        let root = zbus::blocking::Proxy::new(
+            &conn,
+            BRIGHTNESS_DEST,
+            BRIGHTNESS_ROOT,
+            "org.kde.ScreenBrightness",
+        )
+        .ok()?;
+        let names: Vec<String> = root.get_property("DisplaysDBusNames").ok()?;
+        let mut fallback = None;
+        for name in names {
+            let path = zbus::zvariant::OwnedObjectPath::try_from(format!("{BRIGHTNESS_ROOT}/{name}"))
+                .ok()?;
+            let proxy = zbus::blocking::Proxy::new(
+                &conn,
+                BRIGHTNESS_DEST,
+                path,
+                "org.kde.ScreenBrightness.Display",
+            )
+            .ok()?;
+            let is_internal: bool = proxy.get_property("IsInternal").unwrap_or(false);
+            if is_internal {
+                return Some((conn, proxy));
+            }
+            if fallback.is_none() {
+                fallback = Some((conn.clone(), proxy));
+            }
+        }
+        fallback
+    }
+
+    fn kde_brightness_percent() -> Option<u8> {
+        let (_conn, proxy) = brightness_object()?;
+        let cur: i32 = proxy.get_property("Brightness").ok()?;
+        let max: i32 = proxy.get_property("MaxBrightness").ok()?;
+        if max <= 0 {
+            return None;
+        }
+        Some(((cur as i64 * 100 / max as i64).clamp(0, 100)) as u8)
+    }
+
+    fn kde_set_brightness_percent(level: u8) -> Result<(), String> {
+        let (_conn, proxy) = brightness_object().ok_or("no ScreenBrightness display object")?;
+        let max: i32 = proxy.get_property("MaxBrightness").map_err(|e| e.to_string())?;
+        let target = (max as i64 * level.min(100) as i64 / 100) as i32;
+        proxy
+            .call_method("SetBrightness", &(target, 0u32))
+            .map_err(|e| e.to_string())?;
+        Ok(())
+    }
+
+    /// GNOME/compatible `gsd-power` fallback (i is 0..100).
+    fn gnome_set_brightness_percent(level: u8) -> Result<(), String> {
+        let conn = zbus::blocking::Connection::session().map_err(|e| e.to_string())?;
+        let proxy = zbus::blocking::Proxy::new(
+            &conn,
+            "org.gnome.SettingsDaemon.Power",
+            "/org/gnome/SettingsDaemon/Power",
+            "org.gnome.SettingsDaemon.Power.Screen",
+        )
+        .map_err(|e| e.to_string())?;
+        proxy
+            .call_method("SetPercentage", &(level.min(100) as i32))
+            .map_err(|e| e.to_string())?;
+        Ok(())
     }
 
     pub fn get_brightness() -> Result<u8, String> {
+        if let Some(pct) = kde_brightness_percent() {
+            return Ok(pct);
+        }
         let dir = backlight_dir().ok_or("no backlight device (need a kernel backlight driver)")?;
         let cur: u32 = std::fs::read_to_string(dir.join("brightness"))
             .map_err(|e| e.to_string())?
@@ -263,16 +493,36 @@ mod imp {
     }
 
     pub fn set_brightness(level: u8) -> Result<(), String> {
-        let dir = backlight_dir().ok_or("no backlight device (need a kernel backlight driver)")?;
-        let max: u32 = std::fs::read_to_string(dir.join("max_brightness"))
-            .map_err(|e| e.to_string())?
-            .trim()
-            .parse()
-            .map_err(|_| "unparsable max_brightness value".to_string())?;
-        let target = (max as u64 * level.min(100) as u64 / 100) as u32;
-        std::fs::write(dir.join("brightness"), target.to_string())
-            .map_err(|e| format!("write {}: {e}", dir.join("brightness").display()))
+        let level = level.min(100);
+        // 1. Compositor owns brightness on Wayland; sysfs is root-only there.
+        if let Ok(()) = kde_set_brightness_percent(level) {
+            return Ok(());
+        }
+        if let Ok(()) = gnome_set_brightness_percent(level) {
+            return Ok(());
+        }
+        // 2. sysfs: works when udev grants the active session write access, or as root.
+        let mut last_err = String::from("no brightness backend accepted the change");
+        for dir in backlight_dirs() {
+            let path = dir.join("brightness");
+            let Ok(max_raw) = std::fs::read_to_string(dir.join("max_brightness")) else {
+                continue;
+            };
+            let Ok(max) = max_raw.trim().parse::<u32>() else {
+                continue;
+            };
+            if max == 0 {
+                continue;
+            }
+            let target = (max as u64 * level as u64 / 100) as u32;
+            match std::fs::write(&path, target.to_string()) {
+                Ok(()) => return Ok(()),
+                Err(e) => last_err = format!("write {}: {e}", path.display()),
+            }
+        }
+        Err(last_err)
     }
+
 }
 
 #[cfg(not(windows))]

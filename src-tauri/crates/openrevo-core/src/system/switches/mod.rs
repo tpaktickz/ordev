@@ -193,7 +193,73 @@ fn netsh_set_wifi(adapter: &str, enable: bool) {
 fn netsh_set_wifi(_adapter: &str, _enable: bool) {}
 
 pub fn set_keep_awake(enable: bool) {
+    #[cfg(not(windows))]
+    {
+        let actual = keep_awake::apply(enable);
+        KEEP_AWAKE_ACTIVE.store(actual, std::sync::atomic::Ordering::Relaxed);
+        return;
+    }
+    #[cfg(windows)]
     KEEP_AWAKE_ACTIVE.store(enable, std::sync::atomic::Ordering::Relaxed);
+}
+
+/// A held logind inhibitor is the only thing that actually stops idle sleep on
+/// Linux: the flag alone is invisible to the session. The fd must stay open, so it
+/// is owned by this module and closed when the switch goes off.
+#[cfg(not(windows))]
+mod keep_awake {
+    use std::sync::Mutex;
+
+    use zbus::zvariant::OwnedFd;
+
+    static HELD: Mutex<Option<OwnedFd>> = Mutex::new(None);
+
+    fn reason() -> &'static str {
+        "OpenRevo: keep awake switch is on"
+    }
+
+    /// Returns the state actually in effect.
+    pub fn apply(enable: bool) -> bool {
+        let mut held = match HELD.lock() {
+            Ok(g) => g,
+            Err(poisoned) => poisoned.into_inner(),
+        };
+        if enable {
+            if held.is_some() {
+                return true;
+            }
+            match inhibit() {
+                Ok(pair) => {
+                    *held = Some(pair);
+                    crate::log_info!("DEVICE_SWITCH", "Keep awake: logind idle inhibitor taken");
+                    true
+                }
+                Err(err) => {
+                    crate::log_warn!("DEVICE_SWITCH", "Keep awake: logind inhibit failed: {err}");
+                    false
+                }
+            }
+        } else {
+            if held.take().is_some() {
+                crate::log_info!("DEVICE_SWITCH", "Keep awake: logind idle inhibitor released");
+            }
+            false
+        }
+    }
+
+    fn inhibit() -> Result<OwnedFd, String> {
+        let conn = zbus::blocking::Connection::system().map_err(|e| e.to_string())?;
+        let reply = conn
+            .call_method(
+                Some("org.freedesktop.login1"),
+                "/org/freedesktop/login1",
+                Some("org.freedesktop.login1.Manager"),
+                "Inhibit",
+                &("idle:sleep", "OpenRevo", reason(), "block"),
+            )
+            .map_err(|e| e.to_string())?;
+        reply.body().deserialize::<OwnedFd>().map_err(|e| e.to_string())
+    }
 }
 
 pub fn is_keep_awake() -> bool {
@@ -279,6 +345,19 @@ pub fn get_switches_state() -> QuickSwitchesState {
     let mut cfg = crate::system::config::load_config();
     static ONCE_RESTORE: std::sync::Once = std::sync::Once::new();
     ONCE_RESTORE.call_once(|| {
+        // Windows restores the persisted switches onto the EC at first use because the
+        // firmware clears those bits on every cold boot. Linux reads the same registers
+        // live through the broker, so the hardware is authoritative there and the
+        // persisted copy is what gets corrected below instead of the other way round.
+        #[cfg(not(windows))]
+        if cfg.keep_awake_enabled {
+            set_keep_awake(true);
+            crate::log_info!("DEVICE_SWITCH", "Restored Keep Awake: enabled=true");
+        }
+        #[cfg(not(windows))]
+        return;
+
+        #[allow(unreachable_code)]
         // 1. Touchpad restore
         if !cfg.touchpad_enabled {
             crate::driver::wmi_ec::wmi_modify_ec_mask(
@@ -453,7 +532,7 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
             // 1. Try native WinRT Radio API first (fast RF transmitter toggle, ~10ms)
             let radio_ok = radio::set_wifi_radio_state_native(enable);
             if radio_ok {
-                crate::log_info!("DEVICE_SWITCH", "Wi-Fi radio toggled to {} via WinRT Radio API", enable);
+                crate::log_info!("DEVICE_SWITCH", "Wi-Fi radio toggled to {}", enable);
             } else {
                 let adapter_name = radio::get_or_detect_wifi_adapter(&mut cfg);
                 netsh_set_wifi(&adapter_name, enable);
@@ -464,7 +543,7 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
         "bluetooth" => {
             let success = radio::set_native_bluetooth_radio_state(enable);
             if success {
-                crate::log_info!("DEVICE_SWITCH", "Bluetooth radio toggled to {} via WinRT", enable);
+                crate::log_info!("DEVICE_SWITCH", "Bluetooth radio toggled to {} via the platform radio backend", enable);
             } else {
                 crate::log_warn!("DEVICE_SWITCH", "WinRT Radio could not find Bluetooth adapter");
             }
@@ -474,6 +553,16 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
         "touchpad" => {
             // Always ensure PnP device in Device Manager is restored/enabled so Windows & Fn+F5 operate normally
             touchpad::ensure_touchpad_device_enabled();
+
+            // Linux: KWin's per-device `enabled` property is what actually stops
+            // touch input; the EC bit below only follows for the indicator LED.
+            #[cfg(not(windows))]
+            if !touchpad::kde_set_touchpad_enabled(enable) {
+                crate::log_warn!(
+                    "DEVICE_SWITCH",
+                    "no KWin touchpad device answered; only the EC bit will follow"
+                );
+            }
 
             // 1. Hardware EC: Synchronize Touchpad state
             // (Controls physical corner indicator LED on models with LED, and keeps EC state aligned)
@@ -503,7 +592,7 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
             camera::write_camera_consent_registry(enable);
 
             // 4. Hardware EC: on supported hardware with physical LDO line
-            if has_ec_switches {
+            if has_ec_switches || camera::ec_camera_cut_off().is_some() {
                 // Clear bit 3 -> Camera Power ON (enable), Set bit 3 -> Camera Physical Cutoff (!enable)
                 crate::driver::wmi_ec::wmi_modify_ec_mask(
                     crate::driver::wmi_ec::ADDR_CAMERA_CUTOFF,
@@ -525,6 +614,25 @@ pub fn set_switch(switch_name: &str, enable: bool) -> Result<bool, String> {
                 let hw_locked = crate::driver::wmi_ec::is_winkey_locked_hw();
                 if hw_locked != enable {
                     crate::driver::wmi_ec::send_winkey_lock_trigger();
+                }
+                // The EC pulse is a Windows-driver conveniences: on firmware that ignores
+                // it (verified on KUANGSHI-JIGUANG, 0x768 stays 0) the bit never moves.
+                // Report that instead of persisting a state the hardware did not take —
+                // a real key filter needs EVIOCGRAB + uinput behind a privilege grant.
+                let applied = crate::driver::wmi_ec::is_winkey_locked_hw();
+                if applied != enable {
+                    set_win_key_locked(applied);
+                    cfg.win_key_locked = applied;
+                    let _ = crate::system::config::save_config(&cfg);
+                    crate::log_warn!(
+                        "DEVICE_SWITCH",
+                        "WinKey lock: firmware ignored the trigger (EC status stays {}); reporting unchanged",
+                        applied
+                    );
+                    return Err(
+                        "win-key lock is not honoured by this firmware; the key filter needs a keyboard grab"
+                            .to_string(),
+                    );
                 }
             }
 

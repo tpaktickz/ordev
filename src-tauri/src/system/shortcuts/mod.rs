@@ -4,6 +4,8 @@
 pub mod types;
 pub mod dispatcher;
 pub mod manager;
+#[cfg(target_os = "linux")]
+pub mod portal;
 
 pub use types::{ParsedKeyCombo, ShortcutAction, ShortcutBinding};
 pub use manager::{
@@ -13,7 +15,7 @@ pub use manager::{
 
 /// Initialize the Universal Shortcut Bus subsystem.
 /// Loads persistent custom shortcuts saved in host config.json.
-pub fn init_shortcuts() {
+pub fn init_shortcuts(app: Option<&tauri::AppHandle>) {
     let cfg = crate::system::config::load_config();
     let count = cfg.custom_shortcuts.len();
     for binding in cfg.custom_shortcuts {
@@ -24,6 +26,8 @@ pub fn init_shortcuts() {
         "Initialized OpenRevo Universal Shortcut Bus (loaded {} persistent custom shortcuts)",
         count
     );
+    #[cfg(target_os = "linux")]
+    portal::start(app.cloned());
 }
 
 /// Probes whether a key combination is currently occupied:

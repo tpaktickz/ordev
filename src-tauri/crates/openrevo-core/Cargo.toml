@@ -23,6 +23,11 @@ ureq = { version = "2.10", default-features = false, features = ["json", "native
 sha2 = "0.10"
 rhai = { version = "1.19", features = ["sync", "no_module", "no_custom_syntax", "no_closure", "no_optimize"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Brightness control: KDE/GNOME expose the panel backlight over the session bus,
+# because /sys/class/backlight/*/brightness is root-only (mode 0644) on stock udev.
+zbus = { version = "5", features = ["blocking-api"] }
+
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"
 features = [

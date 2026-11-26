@@ -373,9 +373,9 @@ pub fn sync_slint_display_state() {
     let is_thin_and_light = crate::commands::power_cmd::is_thin_and_light_or_pure_igpu();
     let cfg = crate::system::config::load_config();
     let effective_gpu_mode = if is_thin_and_light {
-        "igpu"
+        "igpu".to_string()
     } else {
-        &cfg.gpu_mode
+        crate::commands::tuning_cmd::effective_gpu_mode()
     };
 
     send_slint_ipc_message(serde_json::json!({
@@ -437,16 +437,17 @@ pub fn sync_slint_power_state() {
     if let Some(app) = app_opt {
         let ec_state: tauri::State<crate::driver::ec_bridge::SharedEcBridge> = app.state();
         let info = crate::commands::power_cmd::read_power_settings(ec_state.inner());
+        let hw = crate::system::hw_truth::read();
         send_slint_ipc_message(serde_json::json!({
             "action": "sync_power_settings",
-            "power_mode": cfg.power_mode,
+            "power_mode": hw.power_mode.unwrap_or(cfg.power_mode),
             "battery_percent": info.battery_percent,
             "is_ac_online": info.is_ac_online,
             "is_dc_online": crate::commands::power_cmd::is_dc_round_plugged_in(),
             "is_thin_and_light": crate::commands::power_cmd::is_thin_and_light_or_pure_igpu(),
             "unlock_battery_limit": cfg.unlock_battery_power_limit,
             "battery_mode": info.battery_mode,
-            "battery_limit": info.battery_limit,
+            "battery_limit": hw.battery_limit.unwrap_or(info.battery_limit),
             "usb_charge_enabled": info.usb_charge_enabled,
             "ac_recovery_enabled": info.ac_recovery_enabled,
             "high_perf_scheme": info.high_perf_scheme,
@@ -459,29 +460,31 @@ pub fn sync_slint_power_state() {
             "sleep_hibernate_30m": info.sleep_hibernate_30m,
             "sleep_auto_office": info.sleep_auto_office,
             "turbo_submode_supported": crate::system::power::turbo_submode::is_supported(),
-            "turbo_silent": cfg.turbo_silent,
+            "turbo_silent": hw.turbo_silent.unwrap_or(cfg.turbo_silent),
             "gpu_oc_on": gpu_oc_on,
         }));
     } else {
         let cfg = crate::system::config::load_config();
         let (percent, is_ac, _) = crate::commands::power_cmd::get_live_power_status();
-        let mode = if cfg.battery_limit >= 95 {
+        let hw = crate::system::hw_truth::read();
+        let limit = hw.battery_limit.unwrap_or(cfg.battery_limit);
+        let mode = if limit >= 95 {
             "long_life"
-        } else if cfg.battery_limit <= 65 {
+        } else if limit <= 65 {
             "station"
         } else {
             "balance"
         };
         send_slint_ipc_message(serde_json::json!({
             "action": "sync_power_settings",
-            "power_mode": cfg.power_mode,
+            "power_mode": hw.power_mode.unwrap_or(cfg.power_mode),
             "battery_percent": percent,
             "is_ac_online": is_ac,
             "is_dc_online": crate::commands::power_cmd::is_dc_round_plugged_in(),
             "is_thin_and_light": crate::commands::power_cmd::is_thin_and_light_or_pure_igpu(),
             "unlock_battery_limit": cfg.unlock_battery_power_limit,
             "battery_mode": mode,
-            "battery_limit": cfg.battery_limit,
+            "battery_limit": limit,
             "usb_charge_enabled": cfg.usb_charge_enabled,
             "ac_recovery_enabled": cfg.ac_recovery_enabled,
             "high_perf_scheme": cfg.high_perf_scheme,
@@ -494,7 +497,7 @@ pub fn sync_slint_power_state() {
             "sleep_hibernate_30m": cfg.sleep_hibernate_30m,
             "sleep_auto_office": cfg.sleep_auto_office,
             "turbo_submode_supported": crate::system::power::turbo_submode::is_supported(),
-            "turbo_silent": cfg.turbo_silent,
+            "turbo_silent": hw.turbo_silent.unwrap_or(cfg.turbo_silent),
             "gpu_oc_on": gpu_oc_on,
         }));
     }
@@ -516,6 +519,7 @@ pub fn sync_slint_switches_state() {
         super::actions::switches::get_slint_bld_target_rpm()
     };
     let flags = crate::driver::wmi_ec::get_hardware_support_flags();
+    let hw = crate::system::hw_truth::read();
     send_slint_ipc_message(serde_json::json!({
         "action": "sync_state",
         "camera_enabled": switches.camera,
@@ -528,10 +532,10 @@ pub fn sync_slint_switches_state() {
         "fn_locked": switches.fn_lock,
         "wifi_enabled": switches.wifi,
         "bt_enabled": switches.bluetooth,
-        "fan_boost": cfg.fan_boost,
+        "fan_boost": hw.fan_boost.unwrap_or(cfg.fan_boost),
         "is_bld_fan_lock": is_bld_fan_lock,
         "bld_fan_rpm": bld_fan_rpm,
-        "power_mode": cfg.power_mode,
+        "power_mode": hw.power_mode.unwrap_or(cfg.power_mode),
         "is_dc_online": crate::commands::power_cmd::is_dc_round_plugged_in(),
         "is_thin_and_light": crate::commands::power_cmd::is_thin_and_light_or_pure_igpu(),
         "unlock_battery_limit": cfg.unlock_battery_power_limit,
@@ -1038,13 +1042,19 @@ pub fn get_current_power_targets(power_mode: u8) -> (i32, i32, String) {
     let matched = profiles.iter().find(|p| p.id == active_id).or_else(|| profiles.first());
     let custom_profile = matched.map(|p| &p.profile).unwrap_or(&cfg.custom_profile);
 
-    compute_power_targets(
+    let (pl1, tgp, text) = compute_power_targets(
         power_mode,
         &presets,
         cfg.balanced_gpu_dynamic_boost,
         Some(custom_profile),
         is_pure_igpu,
-    )
+    );
+
+    // The preset says what we asked for; the EC says what actually latched (the
+    // firmware clamps cTGP on battery, the OEM console may have raised PL1, Fn
+    // keys can drop both). Report the latched values when they are plausible.
+    let hw = crate::system::hw_truth::read();
+    (hw.pl1.map(i32::from).unwrap_or(pl1), hw.tgp.map(i32::from).unwrap_or(tgp), text)
 }
 
 pub fn sync_slint_power_targets(power_mode: u8) {

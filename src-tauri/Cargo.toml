@@ -50,6 +50,13 @@ rhai = { version = "1.19", features = ["sync", "no_module", "no_custom_syntax", 
 dbus = "0.9"
 ksni = "0.2"
 libc = "0.2"
+# Desktop portal GlobalShortcuts bridge; the locking blocking API keeps the
+# shortcut thread free of an async runtime.
+zbus = "5"
+# Decodes the embedded application icon for the StatusNotifierItem pixmap: a
+# Wayland shell has no window-icon protocol, so the tray is the only place the
+# product icon can be set from inside the process.
+image = { version = "0.25", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies.windows]
 version = "0.58"

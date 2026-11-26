@@ -104,6 +104,17 @@ pub fn apply_silent(silent: bool) -> Result<(), String> {
     let wmi_ok = crate::driver::wmi_mulong::mulong_exec_raw(cmd);
 
     if !wmi_ok {
+        // The WMI GetSetULong channel does not exist outside Windows, but the EC
+        // selection bit is the authority the firmware itself latches on. When the
+        // bit verifiably holds the requested value, the switch succeeded.
+        if cfg!(not(windows)) && current_silent() == Some(silent) {
+            crate::log_info!(
+                "POWER_MODE",
+                "turbo submode applied via EC bit only (silent={}, no WMI channel on this platform)",
+                silent
+            );
+            return Ok(());
+        }
         // 回滚选择位，保证硬件状态与软件认知一致
         let _ = crate::driver::wmi_ec::wmi_write_ec(addr, prev);
         crate::log_error!(

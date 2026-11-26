@@ -948,7 +948,11 @@ fn run_nvml_poller(
 
     loop {
         let sleep_ms = if ctx.is_some() {
-            if idle_streak >= IDLE_STREAK_THRESHOLD {
+            // The idle backoff exists to let the dGPU drop into RTD3, but a
+            // visible panel means someone is watching these numbers: keep the
+            // active cadence so the reading is not up to 5 s stale.
+            let watching = crate::system::telemetry::is_telemetry_active();
+            if idle_streak >= IDLE_STREAK_THRESHOLD && !watching {
                 NVML_IDLE_INTERVAL_MS
             } else {
                 NVML_ACTIVE_INTERVAL_MS

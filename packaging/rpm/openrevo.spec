@@ -70,7 +70,7 @@ cargo build --locked --release -p openrevo-core --bin openrevo-ec-helper
 # rather than inherited from the environment.
 TARGET=%{_builddir}/%{name}-%{version}/target
 install -Dm755 $TARGET/release/open-revo %{buildroot}%{_bindir}/open-revo
-install -Dm644 packaging/linux/openrevo.desktop %{buildroot}%{_datadir}/applications/open-revo.desktop
+install -Dm644 packaging/linux/org.openrevo.OpenRevo.desktop %{buildroot}%{_datadir}/applications/org.openrevo.OpenRevo.desktop
 for size in 32 64 128; do
   install -Dm644 "src-tauri/icons/${size}x${size}.png" \
     %{buildroot}%{_datadir}/icons/hicolor/${size}x${size}/apps/open-revo.png
@@ -118,7 +118,7 @@ fi
 %files
 %license LICENSE
 %{_bindir}/open-revo
-%{_datadir}/applications/open-revo.desktop
+%{_datadir}/applications/org.openrevo.OpenRevo.desktop
 %{_datadir}/icons/hicolor/*/apps/open-revo.png
 %{_udevrulesdir}/60-openrevo.rules
 %config %{_sysconfdir}/modprobe.d/openrevo.conf

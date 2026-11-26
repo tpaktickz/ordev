@@ -28,7 +28,7 @@ override_dh_auto_test:
 
 override_dh_auto_install:
 	install -Dm755 $(TARGET)/release/open-revo debian/openrevo/usr/bin/open-revo
-	install -Dm644 packaging/linux/openrevo.desktop debian/openrevo/usr/share/applications/open-revo.desktop
+	install -Dm644 packaging/linux/org.openrevo.OpenRevo.desktop debian/openrevo/usr/share/applications/org.openrevo.OpenRevo.desktop
 	for size in 32 64 128; do \
 	  install -Dm644 src-tauri/icons/$${size}x$${size}.png \
 	    debian/openrevo/usr/share/icons/hicolor/$${size}x$${size}/apps/open-revo.png; \

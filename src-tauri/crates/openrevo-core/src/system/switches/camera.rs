@@ -203,6 +203,14 @@ pub fn write_camera_consent_registry(enable: bool) {
 
 /// Read real-time Camera hardware / system status (PnP Device Manager + Policy + ConsentStore + EC)
 pub fn get_realtime_camera_state(has_ec_switches: bool, fallback: bool) -> bool {
+    // 0. Linux: the EC camera line is the switch. A missing /dev/video node means
+    //    nothing here — MIPI/IPU6 cameras only produce nodes once the full ISP stack
+    //    is loaded, so probing video4linux would report "off" on a powered camera.
+    #[cfg(not(windows))]
+    if let Some(cut_off) = ec_camera_cut_off() {
+        return !cut_off;
+    }
+
     // 1. Check PnP Device Manager status via pnputil (~10ms)
     if let Some(started) = get_camera_pnp_status() {
         return started;
@@ -232,6 +240,12 @@ pub fn get_realtime_camera_state(has_ec_switches: bool, fallback: bool) -> bool 
     }
 
     fallback
+}
+
+/// EC camera power-line state. `Some(true)` means the physical line is cut.
+pub fn ec_camera_cut_off() -> Option<bool> {
+    let val = crate::driver::wmi_ec::wmi_read_ec(crate::driver::wmi_ec::ADDR_CAMERA_CUTOFF)?;
+    Some((val & crate::driver::wmi_ec::CAMERA_CUTOFF_BITMASK) != 0)
 }
 
 // ---------------------------------------------------------------------------

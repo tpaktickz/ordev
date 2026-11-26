@@ -341,7 +341,7 @@ pub fn init_hooks(app: Option<&AppHandle>) {
         );
     }
 
-    crate::system::shortcuts::init_shortcuts();
+    crate::system::shortcuts::init_shortcuts(app);
 
     ensure_hook_running();
 }
