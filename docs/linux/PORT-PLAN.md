@@ -241,16 +241,19 @@ broker 进程必须禁掉自己的客户端（`pal::ec::linux::disable_broker_cl
 - **BlueZ**：`ble_cooler` 的扫描/连接一律返回 Err，蓝牙水冷在 Linux 当前不可用（用户明确说过不急）。
 - **colord**：ICC 安装只写关联文件，没让 colord 真挂载；gamma 已能直写 DRM，跨桌面着色仍靠直写。
 - **native_wry**：插件宿主在 Linux 由 Tauri 独立 toplevel 承担；`native_wry` 的 wry 合成路径在 Linux 已允许跨线程建 GTK event loop（`EventLoopBuilderExtUnix::with_any_thread`），但未在真机验证。
-- **layer-shell OSD**：winit 0.30 不暴露 `wl_surface`，所以 OSD 仍是普通 toplevel + `always-on-top`，定位交给合成器策略。
+- **layer-shell OSD**：**已落地**。winit 0.30 不暴露 `wl_surface`，所以不换渲染、只换窗：自建 Slint platform（`MinimalSoftwareWindow` + 软件渲染器渲进内存缓冲），再用 GTK3 窗口进 `zwlr_layer_shell_v1` 的 overlay 层；`.slint`、主题、动画、全部 IPC handler 保持不变。`libgtk-layer-shell.so.0` 缺失或 X11 会话时 `install()` 返回 false，自动回落到原来的 toplevel。
 
 ---
 
 ## P4 Wayland / KDE 专项
 
-1. **OSD / 小组件**：**未落地**。原计划的 `unstable-winit-030` + `zwlr_layer_shell_v1` 路线被证伪了一半：`WinitWindowAccessor::winit_window()` 确实能拿到 winit 窗口，但 **winit 0.30 不公开 `wl_surface`**（`platform/wayland.rs` 只有 `is_wayland()`、`with_wayland()` 之类），所以拿不到可包成 `zwlr_layer_surface_v1` 的代理。可行路线只剩两条，都需要额外进程或额外重写：
-   - 用 `gtk-layer-shell` 写一个独立 GTK OSD 进程，替换现有的 Slint OSD（照抄 `docs/linux/ref/gglib-layer-shell.rs`：`LAYER_OVERLAY=3`、`KEYBOARD_ON_DEMAND=2`、先 `gtk_layer_is_supported()`）。
-   - 等 winit 暴露 `wayland_surface()` 后自接协议。
-   当前交付：OSD 是普通 toplevel + `always-on-top: true`（`crates/openrevo-osd/ui/osd.slint:5-7`），固定 640×130，定位由合成器决定（KWin 下新 toplevel 居中）。
+1. **OSD / 小组件**：**已落地**（`src-tauri/crates/openrevo-osd/src/layer_shell.rs`）。原计划的 `unstable-winit-030` + `zwlr_layer_shell_v1` 路线确实走不通——`WinitWindowAccessor::winit_window()` 能拿到 winit 窗口，但 winit 0.30 不公开 `wl_surface`，而且 surface 的角色在首次 commit 时已固定为 toplevel，不能再包成 layer surface。最终做法是**换窗不换渲染**：
+   - `LayerPlatform` 实现 Slint 的 `Platform`：`create_window_adapter` 给 `MinimalSoftwareWindow`（`RepaintBufferType::ReusedBuffer`），`run_event_loop` 里建 `gtk::Application`；GTK 的 `DrawingArea::connect_draw` 把预乘 BGRA 缓冲贴进 cairo `ImageSurface`，16ms timeout 驱动 `update_timers_and_animations()` + `draw_if_needed()`。
+   - 跨线程投递（stdin reader → GTK 主线程）走自己的 `PENDING` 队列 + `glib::idle_add_once` 唤醒；`glib::idle_add_local_once` 会在非主线程上 panic（"default main context already acquired by another thread"）。
+   - 定位：surface 固定在 640×130 画布，卡片在画布内垂直居中、水平按 `osd_position` 贴边／居中；锚点用 `set_anchor(edge)` + `set_margin`。左右留 12px，上下留 0——KWin 已经把 bottom 锚定的 layer surface 顶到面板 strut 之上，再按 toplevel 的 70px 留白会叠成两层间隙（实测被多抬 169px）。
+   - 实测（spectacle 截图 + 暗色行扫描，scale 1.5）：`top-left`(33,43) `top-center`(1070,43) `top-right`(2108,43) `bottom-left`(33,1380) `bottom-center`(1070,1380) `bottom-right`(2108,1380) `center`(1070,711)，与画布几何一致。
+   - 顺带修掉的上游 bug：`ui/osd.slint` 的卡片 `x` 分支里漏了 `"bottom-right"`，该位置一直按居中处理。
+   - 卡片与徽章改直角（`border-radius: 0`），与状态条/通知的观感一致。
 2. **主界面保持 Slint，且必须可自由缩放**（详见 P4.5）。
 3. **托盘单击行为**：SNI `Activate` 提供点击坐标，左键唤起主窗；`dismiss_windows_tray_overflow` 在 Linux 恒 no-op。
 4. **快捷键**：portal 会话恢复（`~/.config/openrevo/shortcuts.toml` 存 token），无 portal 时降级 X11 grab 并提示。

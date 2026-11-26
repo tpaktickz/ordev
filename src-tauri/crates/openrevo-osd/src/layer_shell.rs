@@ -82,6 +82,8 @@ struct Api {
     set_anchor: unsafe extern "C" fn(WindowPtr, c_int, c_int),
     set_margin: unsafe extern "C" fn(WindowPtr, c_int, c_int),
     set_keyboard_mode: unsafe extern "C" fn(WindowPtr, c_int),
+    /// Optional: only the trace probe needs it, so a library without it still works.
+    get_anchor: Option<unsafe extern "C" fn(WindowPtr, c_int) -> c_int>,
     _lib: libloading::Library,
 }
 
@@ -102,6 +104,7 @@ impl Api {
                 set_anchor: *lib.get(b"gtk_layer_set_anchor\0").ok()?,
                 set_margin: *lib.get(b"gtk_layer_set_margin\0").ok()?,
                 set_keyboard_mode: *lib.get(b"gtk_layer_set_keyboard_mode\0").ok()?,
+                get_anchor: lib.get(b"gtk_layer_get_anchor\0").ok().map(|s| *s),
                 _lib: lib,
             })
         }
@@ -269,14 +272,34 @@ fn anchor_for(position: &str) -> (c_int, c_int) {
 
 /// Re-anchor the surface, e.g. after the position setting changed.
 pub fn apply_position(position: &str) {
-    let window = LAYER_WINDOW.with(|w| w.borrow().clone());
-    if let Some(window) = window {
-        anchor_window(&window, position);
+    let position = position.to_string();
+    // Callers are usually the stdin reader, where the thread-locals holding the
+    // GTK window are invisible; hop onto the GTK thread the same way events do.
+    if let Ok(mut queue) = PENDING.lock() {
+        queue.push_back(Box::new(move || {
+            let window = LAYER_WINDOW.with(|w| w.borrow().clone());
+            if let Some(window) = window {
+                anchor_window(&window, &position);
+            }
+        }));
     }
+    glib::idle_add_once(|| {});
+}
+
+/// Inset from the anchored edge, in logical pixels.
+///
+/// The toplevel fallback wants 36px on the sides and 70px at the bottom because a
+/// floating window has to clear the taskbar by itself. A layer surface does not:
+/// the compositor already keeps bottom-anchored surfaces out of the panel's strut,
+/// so only the sides need a margin and everything else comes from the canvas
+/// padding the card leaves above and below itself.
+fn margin_for(edge: i32) -> i32 {
+    if edge == EDGE_BOTTOM || edge == EDGE_TOP { 0 } else { 12 }
 }
 
 fn anchor_window(window: &gtk::ApplicationWindow, position: &str) {
     let Some(api) = API.get() else { return };
+    let trace = std::env::var_os("OPENREVO_OSD_LAYER_TRACE").is_some();
     let ptr = window_ptr(window);
     let (horizontal, vertical) = anchor_for(position);
     for (edge, anchored) in [
@@ -288,11 +311,20 @@ fn anchor_window(window: &gtk::ApplicationWindow, position: &str) {
         let anchored = if anchored { 1 } else { 0 };
         unsafe {
             (api.set_anchor)(ptr, edge, anchored);
-            // Flush against the edge: the component already insets its own card, so
-            // an extra compositor margin would double the gap.
+            // The surface is the whole 640x130 canvas, so the margin is what
+            // decides the gap between card and screen edge; see `margin_for`.
             if anchored == 1 {
-                (api.set_margin)(ptr, edge, 0);
+                (api.set_margin)(ptr, edge, margin_for(edge));
             }
+        }
+    }
+    if trace {
+        if let Some(get_anchor) = api.get_anchor {
+            let state: Vec<c_int> = [EDGE_LEFT, EDGE_RIGHT, EDGE_TOP, EDGE_BOTTOM]
+                .into_iter()
+                .map(|e| unsafe { get_anchor(ptr, e) })
+                .collect();
+            eprintln!("layer anchor for {position:?}: left/right/top/bottom = {state:?}");
         }
     }
 }

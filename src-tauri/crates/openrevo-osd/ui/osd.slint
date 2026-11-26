@@ -37,12 +37,13 @@ export component OsdWindow inherits Window {
         width: (is_cinema ? 280px : (is_fade ? 320px : 300px)) * osd_scale;
         height: (is_cinema ? 68px : (is_fade ? 74px : 76px)) * osd_scale;
         x: (osd_position == "top-left" || osd_position == "left" || osd_position == "bottom-left") ? 0px
-            : ((osd_position == "top-right" || osd_position == "right") ? (parent.width - self.width)
+            : ((osd_position == "top-right" || osd_position == "right" || osd_position == "bottom-right") ? (parent.width - self.width)
             : ((parent.width - self.width) / 2));
         y: is_active ? ((parent.height - self.height) / 2) : -100px;
         opacity: is_active ? 1.0 : 0.0;
 
-        border-radius: is_pill ? (38px * osd_scale) : (is_fade ? (custom_radius_sm * osd_scale) : (custom_radius_md * osd_scale));
+        // 直角卡片：圆角会让它在游戏画面上看起来像一颗药丸，和状态条/通知的观感不一致
+        border-radius: 0px;
         background: is_cinema ? cinema_bg_color : (is_fade ? @linear-gradient(90deg, card_bg_color 0%, card_bg_mid 68%, card_bg_end 100%) : card_bg_color);
         border-width: is_pill ? (1.5px * osd_scale) : 0px;
         border-color: accent_color;
@@ -79,7 +80,8 @@ export component OsdWindow inherits Window {
                 badge := Rectangle {
                     width: 44px * osd_scale;
                     height: 44px * osd_scale;
-                    border-radius: is_pill ? (22px * osd_scale) : (is_fade ? (8px * osd_scale) : (22px * osd_scale));
+                    // 跟随卡片保持直角，避免方块卡片里嵌一个圆形徽章
+                    border-radius: 0px;
                     background: is_cinema ? transparent : accent_bg;
                     border-width: is_pill ? (1.5px * osd_scale) : (is_fade ? (1px * osd_scale) : 0px);
                     border-color: accent_color;
