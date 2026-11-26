@@ -14,6 +14,10 @@ use std::process::{Command, Stdio};
 
 const HELPER: &str = env!("CARGO_BIN_EXE_openrevo-ec-helper");
 
+/// Mirrors `MAX_OPS` in `src/bin/openrevo-ec-helper.rs`. One fan-table commit is
+/// 96 duty + threshold writes, so the cap is 192; keep the two in sync.
+const MAX_OPS: usize = 192;
+
 fn run(args: &[&str], stdin: &str) -> (i32, String, String) {
     let mut child = Command::new(HELPER)
         .args(args)
@@ -81,11 +85,14 @@ fn empty_request_is_rejected() {
 
 #[test]
 fn oversized_request_is_rejected() {
-    // MAX_OPS is 64; the 65th write must be refused before any port access.
-    let payload: String = (0..65).map(|i| format!("w {:04x} 00\n", i)).collect();
+    // The write after MAX_OPS must be refused before any port access.
+    let payload: String = (0..=MAX_OPS).map(|i| format!("w {:04x} 00\n", i)).collect();
     let (code, _, stderr) = run(&["write"], &payload);
-    assert_eq!(code, 2, "65 writes should be rejected");
-    assert!(stderr.contains("more than 64 writes"), "stderr: {stderr}");
+    assert_eq!(code, 2, "{} writes should be rejected", MAX_OPS + 1);
+    assert!(
+        stderr.contains(&format!("more than {MAX_OPS} writes")),
+        "stderr: {stderr}"
+    );
 }
 
 #[test]
@@ -197,15 +204,15 @@ fn broker_bounds_a_single_write_batch() {
         eprintln!("cannot start the broker here; skipping");
         return;
     };
-    // 65 pairs is one past the helper's cap; the address range does not matter
-    // because the request is refused before any of them is touched.
+    // One past the helper's cap; the address range does not matter because the
+    // request is refused before any of them is touched.
     let mut line = String::from("w");
-    for _ in 0..65 {
+    for _ in 0..=MAX_OPS {
         line.push_str(" 0000 00");
     }
     let reply = broker.ask(&line);
     assert!(
-        reply.starts_with("err more than"),
+        reply.starts_with(&format!("err more than {MAX_OPS}")),
         "oversized batch should be refused, got {reply:?}"
     );
 }
